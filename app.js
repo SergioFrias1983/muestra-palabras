@@ -963,7 +963,16 @@ function renderTipeo() {
   box.textContent = '';
   box.append(document.createTextNode(T.chars.slice(0, T.pos).join('')));
   if (T.pos < T.chars.length) box.append(el('span', 'cursor'));
-  box.scrollTop = box.scrollHeight;
+  box.scrollTop = box.scrollHeight;   // desplaza el cuadro hasta la última letra
+  asegurarVisibleT(box);              // y la página, para que no quede tapado por el teclado
+}
+
+/** Si el cuadro de respuesta quedó tapado por el teclado fijo, baja la página lo justo. */
+function asegurarVisibleT(box) {
+  const barra = document.querySelector('#s-tipeo .acciones');
+  if (!barra || !box.getBoundingClientRect) return;
+  const hueco = box.getBoundingClientRect().bottom - barra.getBoundingClientRect().top + 8;
+  if (hueco > 0) window.scrollBy(0, hueco);
 }
 
 /** Muestra de una vez los signos y espacios que siguen (no hay que escribirlos). */
