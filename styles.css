@@ -29,7 +29,7 @@ em{color:var(--txt)}
 .btn:disabled{opacity:.4;cursor:default}
 .btn.small{padding:8px 12px;font-size:.95rem}
 .btn.big{display:block;width:100%;padding:18px;font-size:1.15rem;margin:10px 0}
-.btn.huge{display:block;width:100%;padding:24px 10px;font-size:1.45rem;font-weight:700;letter-spacing:.03em}
+.btn.huge{display:block;width:100%;padding:18px 10px;font-size:1.35rem;font-weight:700;letter-spacing:.03em}
 .btn.primary{background:var(--azul);border-color:var(--azul);color:#fff}
 .btn.success{background:#2e7d32;border-color:#2e7d32;color:#fff}
 .btn.danger{background:#5a2323;border-color:#7d2f2f;color:#ffb4ab}
@@ -59,13 +59,13 @@ textarea{resize:vertical;line-height:1.5}
 .panel summary{cursor:pointer;padding:4px 0}
 .panel .lista{margin:8px -14px -10px;border-radius:0 0 12px 12px}
 .pregunta{color:var(--amar);font-size:1.2rem;font-weight:600;white-space:pre-wrap;margin:12px 0 4px}
-.reloj{font:700 clamp(3rem,19vw,5.5rem)/1.1 ui-monospace,Consolas,"Courier New",monospace;
+.reloj{font:700 clamp(2.8rem,16vw,4.6rem)/1.1 ui-monospace,Consolas,"Courier New",monospace;
   text-align:center;font-variant-numeric:tabular-nums;margin:4px 0}
 .reloj.primero{color:var(--cel)} .reloj.record{color:var(--oro)}
 .reloj.bueno{color:var(--ver)}   .reloj.malo{color:var(--rojo)}
 .barra{height:8px;background:var(--panel2);border-radius:99px;overflow:hidden;margin:6px 0 12px}
 #e-barra{height:100%;width:0;background:var(--azul);transition:width .1s}
-.respuesta{min-height:150px;max-height:36vh;overflow:auto;white-space:pre-wrap;word-wrap:break-word;
+.respuesta{min-height:130px;max-height:30vh;overflow:auto;white-space:pre-wrap;word-wrap:break-word;
   background:var(--panel);border-radius:12px;padding:14px;font-size:1.15rem;line-height:1.6;
   user-select:none;-webkit-user-select:none;touch-action:pan-y}
 .respuesta .ultima{color:var(--cel);font-weight:600}
@@ -81,7 +81,10 @@ textarea{resize:vertical;line-height:1.5}
 .score ol{margin:0;padding-left:1.6em}
 .score li{padding:2px 0;font-variant-numeric:tabular-nums}
 .score li.nuevo{color:var(--oro);font-weight:700}
-.acciones{position:sticky;bottom:0;padding:12px 0 6px;background:linear-gradient(rgba(18,18,18,0),var(--bg) 28%)}
+.acciones{position:sticky;bottom:0;z-index:5;padding:10px 0 8px;background:var(--bg);border-top:1px solid var(--borde)}
+.acciones .row{margin:8px 0 0}
+.resultado,.score{scroll-margin-bottom:190px}
+.screen.eval{padding-bottom:12px}
 
 /* modal y aviso */
 #modal{position:fixed;inset:0;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center;z-index:50;padding:18px}

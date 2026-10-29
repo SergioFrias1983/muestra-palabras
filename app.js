@@ -612,6 +612,7 @@ async function terminar() {
   r.hidden = false;
   renderScores();
   botones();
+  r.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   await guardarEstado();
 }
 
