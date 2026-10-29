@@ -143,17 +143,20 @@ function modal({ titulo = '', mensaje = '', input = null, botones }) {
     const tecla = e => {
       if (e.key === 'Escape') {
         e.preventDefault();
+        e.stopPropagation(); // que la tecla no llegue también a la pantalla de atrás
         const c = botones.find(b => b.cancel);
         cerrar(c ? c.valor : null);
       } else if (e.key === 'Enter' && input !== null) {
         e.preventDefault();
+        e.stopPropagation();
         cerrar({ ok: true, texto: inp.value });
       }
     };
+    const abierto = performance.now();
     botones.forEach(b => {
       const btn = el('button', 'btn ' + (b.clase || ''), b.texto);
       btn.type = 'button';
-      btn.onclick = () => cerrar(input !== null && b.valor === 'ok' ? { ok: true, texto: inp.value } : b.valor);
+      btn.onclick = () => { if (performance.now() - abierto < 350) return; cerrar(input !== null && b.valor === 'ok' ? { ok: true, texto: inp.value } : b.valor); };
       bs.appendChild(btn);
     });
     m.hidden = false;
@@ -168,11 +171,24 @@ async function pedirTexto(titulo, def = '') {
   });
   return r && r.ok ? r.texto : null;
 }
-const confirmar = (titulo, mensaje, si = 'Aceptar', clase = 'primary') =>
+const confirmar = (titulo, mensaje, si = 'Aceptar', clase = 'primary', no = 'Cancelar', claseNo = '') =>
   modal({
     titulo, mensaje,
-    botones: [{ texto: 'Cancelar', valor: false, cancel: true }, { texto: si, valor: true, clase }]
+    botones: [{ texto: no, valor: false, cancel: true, clase: claseNo }, { texto: si, valor: true, clase }]
   });
+
+/** Confirma con el reloj en pausa: si el usuario decide seguir, la espera no cuenta en su tiempo. */
+async function confirmarEnPausa(S2, bucleFn, titulo, mensaje, si, clase, no, claseNo) {
+  const corriendo = S2.estado === 'corriendo';
+  let t = 0;
+  if (corriendo) { cancelAnimationFrame(S2.raf); t = performance.now(); }
+  const ok = await confirmar(titulo, mensaje + (corriendo ? '\nEl reloj está en pausa.' : ''), si, clase, no, claseNo);
+  if (corriendo && S2.estado === 'corriendo' && !ok) {
+    S2.t0 += performance.now() - t;          // descuenta el tiempo de espera
+    S2.raf = requestAnimationFrame(bucleFn);
+  }
+  return ok;
+}
 
 /* ---------------- Selector de 4 listas encadenadas ---------------- */
 function crearSelector(cont, alCambiar) {
@@ -251,12 +267,12 @@ function entrar(n) {
 async function puedeSalir() {
   if (actual === 'crear') return resolverCambios();
   if (actual === 'eval' && V.estado === 'corriendo') {
-    const ok = await confirmar('Intento en curso', '¿Salir sin guardar este intento?', 'Salir', 'danger');
+    const ok = await confirmarEnPausa(V, bucle, 'Intento en curso', '¿Salir sin guardar este intento?', 'Salir', 'danger');
     if (!ok) return false;
     cancelarIntento();
   }
   if (actual === 'tipeo' && T.estado === 'corriendo') {
-    const ok = await confirmar('Intento en curso', '¿Salir sin guardar este intento?', 'Salir', 'danger');
+    const ok = await confirmarEnPausa(T, bucleT, 'Intento en curso', '¿Salir sin guardar este intento?', 'Salir', 'danger');
     if (!ok) return false;
     cancelarTipeo();
   }
@@ -491,7 +507,7 @@ function renderListaEval() {
     b.append(el('span', 'num', pad(q.num, 3)), document.createTextNode(resumen(q)));
     b.onclick = async () => {
       if (V.estado === 'corriendo') {
-        if (!(await confirmar('Intento en curso', 'Si cambiás de pregunta, este intento se cancela sin guardarse.', 'Cambiar', 'danger'))) return;
+        if (!(await confirmarEnPausa(V, bucle, 'Intento en curso', 'Si cambiás de pregunta, este intento se cancela sin guardarse.', 'Cambiar', 'danger'))) return;
         cancelarIntento();
       }
       cargarPreguntaEval(q);
@@ -545,6 +561,7 @@ function botones() {
   main.textContent = etiquetas[V.estado];
   $('#e-ver').disabled = V.estado === 'sinPregunta';
   $('#e-cancelar').disabled = V.estado !== 'corriendo';
+  $('#e-cancelar').className = 'btn small' + (V.estado === 'corriendo' ? '' : ' oculto');
 }
 
 function bucle() {
@@ -646,10 +663,17 @@ function cancelarIntento() {
   botones();
 }
 
+async function pedirCancelar() {
+  if (V.estado !== 'corriendo') return;
+  const ok = await confirmarEnPausa(V, bucle, '¿Cancelar el intento?', 'Si cancelás, este intento no se guarda.',
+    'Cancelar intento', 'danger', 'Seguir intentando', 'primary');
+  if (ok) cancelarIntento();
+}
+
 async function verRespuesta() {
   if (!V.q) return;
   if (V.estado === 'corriendo') {
-    if (!(await confirmar('Ver respuesta', 'Si la mostrás, este intento se cancela sin guardarse.', 'Mostrar', 'primary'))) return;
+    if (!(await confirmarEnPausa(V, bucle, 'Ver respuesta', 'Si la mostrás, este intento se cancela sin guardarse.', 'Mostrar', 'primary', 'Seguir intentando'))) return;
   }
   detener();
   V.estado = 'viendo';
@@ -819,7 +843,9 @@ function sonidoError() {
 }
 function actualizarSonido() {
   const b = $('#t-sonido');
-  b.textContent = E.silencio ? '🔇 Silenciado' : '🔊 Sonido';
+  b.textContent = E.silencio ? '🔇' : '🔊';
+  b.title = E.silencio ? 'Activar sonido' : 'Silenciar';
+  b.setAttribute('aria-label', b.title);
   b.setAttribute('aria-pressed', String(!!E.silencio));
 }
 
@@ -875,7 +901,7 @@ function renderListaTipeo() {
     b.append(el('span', 'num', pad(q.num, 3)), document.createTextNode(resumen(q)));
     b.onclick = async () => {
       if (T.estado === 'corriendo') {
-        if (!(await confirmar('Intento en curso', 'Si cambiás de pregunta, este intento se cancela sin guardarse.', 'Cambiar', 'danger'))) return;
+        if (!(await confirmarEnPausa(T, bucleT, 'Intento en curso', 'Si cambiás de pregunta, este intento se cancela sin guardarse.', 'Cambiar', 'danger'))) return;
       }
       cargarPreguntaTipeo(q);
       $('#t-preguntas').open = false;
@@ -929,6 +955,7 @@ function botonesT() {
   $('#t-teclado').className = 'teclado' + (T.estado === 'sinPregunta' ? ' apagado' : '');
   $('#t-ver').disabled = T.estado === 'sinPregunta';
   $('#t-cancelar').disabled = T.estado !== 'corriendo';
+  $('#t-cancelar').className = 'btn small' + (T.estado === 'corriendo' ? '' : ' oculto');
 }
 
 function renderTipeo() {
@@ -1034,6 +1061,13 @@ async function terminarTipeo() {
   await guardarEstado();
 }
 
+async function pedirCancelarT() {
+  if (T.estado !== 'corriendo') return;
+  const ok = await confirmarEnPausa(T, bucleT, '¿Cancelar el intento?', 'Si cancelás, este intento no se guarda.',
+    'Cancelar intento', 'danger', 'Seguir intentando', 'primary');
+  if (ok) cancelarTipeo();
+}
+
 function reintentarT() {
   if (T.estado !== 'fin' || performance.now() < T.bloqueo) return;
   cargarPreguntaTipeo(T.q);
@@ -1048,7 +1082,7 @@ function cancelarTipeo() {
 async function verRespuestaT() {
   if (!T.q) return;
   if (T.estado === 'corriendo') {
-    if (!(await confirmar('Ver respuesta', 'Si la mostrás, este intento se cancela sin guardarse.', 'Mostrar', 'primary'))) return;
+    if (!(await confirmarEnPausa(T, bucleT, 'Ver respuesta', 'Si la mostrás, este intento se cancela sin guardarse.', 'Mostrar', 'primary', 'Seguir intentando'))) return;
   }
   detenerT();
   T.estado = 'viendo';
@@ -1071,11 +1105,12 @@ function enlazarTipeo() {
   $('#t-sonido').onclick = () => {
     E.silencio = !E.silencio;
     actualizarSonido();
+    aviso(E.silencio ? 'Sonido silenciado' : 'Sonido activado');
     guardarEstado();
     if (!E.silencio) audio();
   };
   $('#t-ver').onclick = verRespuestaT;
-  $('#t-cancelar').onclick = cancelarTipeo;
+  $('#t-cancelar').onclick = pedirCancelarT;
   $('#t-main').onclick = reintentarT;
   $('#t-h-ultimos').onclick = () => { T.vistaHist = 'ultimos'; renderHistorial(CFG.tipeo); };
   $('#t-h-mejores').onclick = () => { T.vistaHist = 'mejores'; renderHistorial(CFG.tipeo); };
@@ -1253,7 +1288,7 @@ function enlazar() {
   // evaluación
   $('#e-volver').onclick = volverMenu;
   $('#e-ver').onclick = verRespuesta;
-  $('#e-cancelar').onclick = cancelarIntento;
+  $('#e-cancelar').onclick = pedirCancelar;
   $('#e-h-ultimos').onclick = () => { V.vistaHist = 'ultimos'; renderHistorial(CFG.palabras); };
   $('#e-h-mejores').onclick = () => { V.vistaHist = 'mejores'; renderHistorial(CFG.palabras); };
   const main = $('#e-main');
@@ -1284,12 +1319,12 @@ function enlazar() {
     if (actual === 'eval') {
       if (e.key === ' ' && !e.repeat) { e.preventDefault(); accionPrincipal(); }
       else if (e.key === 'Enter' && !e.repeat && ['listo', 'viendo', 'fin'].includes(V.estado)) { e.preventDefault(); accionPrincipal(); }
-      else if (e.key === 'Escape') cancelarIntento();
+      else if (e.key === 'Escape') pedirCancelar();
     } else if (actual === 'crear' && (e.ctrlKey || e.metaKey)) {
       if (e.key.toLowerCase() === 's') { e.preventDefault(); guardarPregunta(); }
       else if (e.key.toLowerCase() === 'n') { e.preventDefault(); $('#c-nueva').click(); }
     } else if (actual === 'tipeo') {
-      if (e.key === 'Escape') cancelarTipeo();
+      if (e.key === 'Escape') pedirCancelarT();
       else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); tocarTecla(e.key); }
     }
   });

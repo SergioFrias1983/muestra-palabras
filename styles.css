@@ -170,3 +170,8 @@ textarea{resize:vertical;line-height:1.5}
 .cursor{display:inline-block;width:3px;height:1.15em;background:var(--cel);vertical-align:text-bottom;margin-left:1px;
   animation:parpadeo 1s steps(1) infinite}
 @keyframes parpadeo{50%{opacity:0}}
+
+/* El botón Cancelar vive arriba (lejos de la zona donde se toca para jugar) y solo se ve durante un intento */
+.oculto{visibility:hidden}
+.bar .btn.small{flex:none}
+.bar .btn.sonido{min-width:48px;padding:8px 10px;font-size:1.1rem}
