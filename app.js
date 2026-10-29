@@ -90,7 +90,7 @@ const DB = {
    preguntas: [{ id, ruta:[a,b,c,d], num, pregunta, respuesta, archivo? }]
    tiempos:   { idPregunta: [{ f:'YYYY-MM-DD HH:MM:SS', ms, p }] }
    ultima:    última ubicación elegida */
-let E = { v: 1, arbol: {}, preguntas: [], tiempos: {}, ultima: [] };
+let E = { v: 1, arbol: {}, preguntas: [], tiempos: {}, tiemposTipeo: {}, ultima: [], silencio: false };
 let almacenamientoOk = true;
 
 async function guardarEstado() {
@@ -234,7 +234,7 @@ function crearSelector(cont, alCambiar) {
 }
 
 /* ---------------- Navegación ---------------- */
-const PANTALLAS = ['menu', 'crear', 'sel', 'eval', 'datos'];
+const PANTALLAS = ['menu', 'act', 'crear', 'sel', 'eval', 'tipeo', 'datos'];
 let actual = 'menu';
 
 function mostrar(n) {
@@ -243,8 +243,10 @@ function mostrar(n) {
   window.scrollTo(0, 0);
 }
 function entrar(n) {
+  const desdeMenu = actual === 'menu';
   mostrar(n);
-  history.pushState({ n }, '');
+  if (desdeMenu) history.pushState({ n }, '');
+  else history.replaceState({ n }, '');
 }
 async function puedeSalir() {
   if (actual === 'crear') return resolverCambios();
@@ -252,6 +254,11 @@ async function puedeSalir() {
     const ok = await confirmar('Intento en curso', '¿Salir sin guardar este intento?', 'Salir', 'danger');
     if (!ok) return false;
     cancelarIntento();
+  }
+  if (actual === 'tipeo' && T.estado === 'corriendo') {
+    const ok = await confirmar('Intento en curso', '¿Salir sin guardar este intento?', 'Salir', 'danger');
+    if (!ok) return false;
+    cancelarTipeo();
   }
   return true;
 }
@@ -396,7 +403,7 @@ async function eliminarPregunta() {
   const q = E.preguntas.find(x => x.id === C.editId);
   if (!q) return;
   if (!(await confirmar('Eliminar pregunta', `¿Eliminar la pregunta ${pad(q.num, 3)}?`, 'Eliminar', 'danger'))) return;
-  const t = E.tiempos[q.id] || [];
+  const t = [...(E.tiempos[q.id] || []), ...(E.tiemposTipeo[q.id] || [])];
   let borrarHist = false;
   if (t.length) {
     borrarHist = await modal({
@@ -409,7 +416,7 @@ async function eliminarPregunta() {
     });
   }
   E.preguntas = E.preguntas.filter(x => x.id !== q.id);
-  if (borrarHist) delete E.tiempos[q.id];
+  if (borrarHist) { delete E.tiempos[q.id]; delete E.tiemposTipeo[q.id]; }
   await guardarEstado();
   aviso('Pregunta eliminada');
   formNuevo();
@@ -420,7 +427,11 @@ async function eliminarPregunta() {
    ===================================================================== */
 const S = { sel: null };
 
-function abrirSeleccion() {
+let MODO = 'palabras';
+function abrirActividades() { entrar('act'); }
+function abrirSeleccion(modo) {
+  MODO = modo || MODO;
+  $('#sel-modo').textContent = MODO === 'tipeo' ? 'Actividad: escribir letra por letra' : 'Actividad: revelar palabras';
   if (!S.sel) S.sel = crearSelector($('#sel-ubicacion'), onUbicacionSel);
   S.sel.refrescar(E.ultima);
   actualizarCuenta();
@@ -454,8 +465,7 @@ const V = {
 
 function iniciarEval(ruta) {
   V.ruta = ruta;
-  mostrar('eval');
-  history.replaceState({ n: 'eval' }, '');
+  entrar('eval');
   $('#e-ruta').textContent = ruta.join(' › ');
   V.q = null;
   V.estado = 'sinPregunta';
@@ -465,7 +475,7 @@ function iniciarEval(ruta) {
   setBox('');
   $('#e-resultado').hidden = true;
   $('#e-preguntas').open = true;
-  renderScores();
+  renderScores(CFG.palabras);
   progreso();
   botones();
 }
@@ -506,7 +516,7 @@ function cargarPreguntaEval(q) {
   setBox('Tocá EMPEZAR. Con el reloj corriendo, cada toque revela una palabra.');
   $('#e-resultado').hidden = true;
   renderListaEval();
-  renderScores();
+  renderScores(CFG.palabras);
   progreso();
   botones();
 }
@@ -619,7 +629,7 @@ async function terminar() {
   r.textContent = '';
   r.append(el('b', '', res.titulo), document.createTextNode(res.detalle));
   r.hidden = false;
-  renderScores(res.clase === 'record');
+  renderScores(CFG.palabras, res.clase === 'record');
   botones();
   r.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   await guardarEstado();
@@ -679,50 +689,58 @@ function fechaHora(f) {
   return `${m[3]}/${m[2]}/${m[1].slice(2)}` + (m[4] ? ` ${m[4]}:${m[5]}` : '');
 }
 
+/* Configuración de cada actividad: prefijo de los elementos, estado y dónde se guardan los tiempos. */
+const CFG = {
+  palabras: { p: 'e', S: () => V, tiempos: () => E.tiempos },
+  tipeo:    { p: 't', S: () => T, tiempos: () => E.tiemposTipeo }
+};
+
 /** Récord de la pregunta elegida: siempre visible arriba, junto al reloj. */
-function renderRecord(nuevo) {
-  const t = V.q ? (E.tiempos[V.q.id] || []) : [];
-  const caja = $('#e-rec');
+function renderRecord(cfg, nuevo) {
+  const S2 = cfg.S();
+  const t = S2.q ? (cfg.tiempos()[S2.q.id] || []) : [];
+  const caja = $('#' + cfg.p + '-rec');
+  caja.className = 'rec';
   if (!t.length) {
-    V.rec = null;
-    $('#e-rec-tiempo').textContent = '—';
-    $('#e-rec-fecha').textContent = V.q ? 'Todavía sin récord' : '';
+    S2.rec = null;
+    $('#' + cfg.p + '-rec-tiempo').textContent = '—';
+    $('#' + cfg.p + '-rec-fecha').textContent = S2.q ? 'Todavía sin récord' : '';
     return;
   }
   const mejor = t.reduce((m, x) => (x.ms < m.ms ? x : m), t[0]);
-  V.rec = mejor.ms;
-  $('#e-rec-tiempo').textContent = formatoTiempo(mejor.ms);
-  $('#e-rec-fecha').textContent = fechaHora(mejor.f);
-  caja.className = 'rec';
+  S2.rec = mejor.ms;
+  $('#' + cfg.p + '-rec-tiempo').textContent = formatoTiempo(mejor.ms);
+  $('#' + cfg.p + '-rec-fecha').textContent = fechaHora(mejor.f);
   if (nuevo) { void caja.offsetWidth; caja.className = 'rec nuevo'; }
 }
 
 /** Tabla de historial (abajo): últimos intentos o los mejores. */
-function renderHistorial() {
-  const cont = $('#e-hist');
+function renderHistorial(cfg) {
+  const S2 = cfg.S();
+  const cont = $('#' + cfg.p + '-hist');
   cont.innerHTML = '';
-  $('#h-ultimos').className = V.vistaHist === 'ultimos' ? 'activo' : '';
-  $('#h-mejores').className = V.vistaHist === 'mejores' ? 'activo' : '';
-  const t = V.q ? (E.tiempos[V.q.id] || []) : [];
+  $('#' + cfg.p + '-h-ultimos').className = S2.vistaHist === 'ultimos' ? 'activo' : '';
+  $('#' + cfg.p + '-h-mejores').className = S2.vistaHist === 'mejores' ? 'activo' : '';
+  const t = S2.q ? (cfg.tiempos()[S2.q.id] || []) : [];
   if (!t.length) {
-    cont.append(el('p', 'muted centro', V.q ? 'Todavía no hay tiempos para esta pregunta.' : '—'));
+    cont.append(el('p', 'muted centro', S2.q ? 'Todavía no hay tiempos para esta pregunta.' : '—'));
     return;
   }
   const rec = Math.min(...t.map(x => x.ms));
-  const filas = V.vistaHist === 'mejores'
+  const filas = S2.vistaHist === 'mejores'
     ? [...t].sort((a, b) => a.ms - b.ms).slice(0, 10).map((x, i) => ({ x, n: i + 1 }))
     : t.map((x, i) => ({ x, n: i + 1 })).reverse().slice(0, 15);
 
   const tabla = el('table', 'tabla');
   const cab = el('tr');
-  [[V.vistaHist === 'mejores' ? 'Puesto' : 'N°', ''], ['Tiempo', ''], ['Fecha', ''], ['vs récord', 'd']]
+  [[S2.vistaHist === 'mejores' ? 'Puesto' : 'N°', ''], ['Tiempo', ''], ['Fecha', ''], ['vs récord', 'd']]
     .forEach(([txt, cls]) => cab.append(el('th', cls, txt)));
   const thead = el('thead'); thead.append(cab); tabla.append(thead);
 
   const tbody = el('tbody');
   filas.forEach(({ x, n }) => {
     const esRec = x.ms === rec;
-    const tr = el('tr', (esRec ? 'es-rec ' : '') + (x === V.ultimoReg ? 'nuevo' : ''));
+    const tr = el('tr', (esRec ? 'es-rec ' : '') + (x === S2.ultimoReg ? 'nuevo' : ''));
     tr.append(
       el('td', '', String(n)),
       el('td', 't', formatoTiempo(x.ms)),
@@ -735,9 +753,332 @@ function renderHistorial() {
   cont.append(tabla);
 }
 
-function renderScores(nuevoRecord) {
-  renderRecord(nuevoRecord);
-  renderHistorial();
+function renderScores(cfg, nuevoRecord) {
+  renderRecord(cfg, nuevoRecord);
+  renderHistorial(cfg);
+}
+
+/* =====================================================================
+   ACTIVIDAD 2: ESCRIBIR LETRA POR LETRA
+   Letras y números hay que escribirlos; espacios y signos aparecen solos.
+   Si la tecla es incorrecta suena un aviso y no se avanza hasta acertar.
+   ===================================================================== */
+const TECLAS_FILAS = ['1234567890', 'qwertyuiop', 'asdfghjklñ', 'zxcvbnm'];
+const TECLAS_OK = TECLAS_FILAS.join('');
+
+const T = {
+  ruta: null, q: null, chars: [], pos: 0, total: 0, hechos: 0, errores: 0,
+  estado: 'sinPregunta', // sinPregunta | listo | corriendo | fin | viendo
+  t0: 0, raf: 0, bloqueo: 0, ultimoReg: null, wake: null,
+  rec: null, pasado: false, vistaHist: 'ultimos', teclas: {}, tecladoListo: false
+};
+
+/** Letra "normalizada": sin mayúsculas ni tildes (la ñ se conserva como letra propia). */
+function normTecla(c) {
+  c = String(c).toLowerCase();
+  if (c === 'ñ') return 'ñ';
+  return c.normalize('NFD').replace(/[̀-ͯ]/g, '');
+}
+/** ¿Hay que escribir este carácter? Letras y números sí; signos y espacios aparecen solos. */
+function esTipeable(c) {
+  const k = normTecla(c);
+  return k.length === 1 && TECLAS_OK.includes(k);
+}
+
+/* ----- Sonido ----- */
+let audioCtx = null;
+function audio() {
+  try {
+    if (!audioCtx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (AC) audioCtx = new AC();
+    }
+    if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+  } catch (e) { /* nada */ }
+  return audioCtx;
+}
+function sonidoError() {
+  if (E.silencio) return;
+  const ctx = audio();
+  if (ctx) {
+    try {
+      const t = ctx.currentTime, o = ctx.createOscillator(), g = ctx.createGain();
+      o.type = 'square';
+      o.frequency.setValueAtTime(200, t);
+      o.frequency.exponentialRampToValueAtTime(110, t + 0.18);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.16, t + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + 0.2);
+      o.connect(g);
+      g.connect(ctx.destination);
+      o.start(t);
+      o.stop(t + 0.22);
+    } catch (e) { /* nada */ }
+  }
+  try { if (navigator.vibrate) navigator.vibrate(40); } catch (e) { /* nada */ }
+}
+function actualizarSonido() {
+  const b = $('#t-sonido');
+  b.textContent = E.silencio ? '🔇 Silenciado' : '🔊 Sonido';
+  b.setAttribute('aria-pressed', String(!!E.silencio));
+}
+
+/* ----- Teclado en pantalla ----- */
+function construirTeclado() {
+  if (T.tecladoListo) return;
+  const cont = $('#t-teclado');
+  cont.innerHTML = '';
+  TECLAS_FILAS.forEach((fila, i) => {
+    const f = el('div', 'tecla-fila' + (i === 0 ? ' nums' : ''));
+    for (const ch of fila) {
+      const b = el('button', 'tecla', ch.toUpperCase());
+      b.type = 'button';
+      b.addEventListener('pointerdown', e => { e.preventDefault(); tocarTecla(ch); });
+      T.teclas[ch] = b;
+      f.append(b);
+    }
+    cont.append(f);
+  });
+  T.tecladoListo = true;
+}
+
+/* ----- Pantalla ----- */
+function iniciarTipeo(ruta) {
+  T.ruta = ruta;
+  entrar('tipeo');
+  $('#t-ruta').textContent = ruta.join(' › ');
+  construirTeclado();
+  actualizarSonido();
+  detenerT();
+  T.q = null;
+  T.estado = 'sinPregunta';
+  T.rec = null;
+  renderListaTipeo();
+  $('#t-pregunta').textContent = 'Elegí una pregunta de la lista';
+  setRelojT(0);
+  setBoxT('');
+  $('#t-resultado').hidden = true;
+  $('#t-preguntas').open = true;
+  renderScores(CFG.tipeo);
+  progresoT();
+  botonesT();
+}
+
+function renderListaTipeo() {
+  const lista = pregs(T.ruta);
+  $('#t-preguntas-titulo').textContent = `Preguntas (${lista.length}) — tocá una para elegirla`;
+  const cont = $('#t-lista');
+  cont.innerHTML = '';
+  lista.forEach(q => {
+    const b = el('button', 'item' + (T.q && T.q.id === q.id ? ' activo' : ''));
+    b.type = 'button';
+    b.append(el('span', 'num', pad(q.num, 3)), document.createTextNode(resumen(q)));
+    b.onclick = async () => {
+      if (T.estado === 'corriendo') {
+        if (!(await confirmar('Intento en curso', 'Si cambiás de pregunta, este intento se cancela sin guardarse.', 'Cambiar', 'danger'))) return;
+      }
+      cargarPreguntaTipeo(q);
+      $('#t-preguntas').open = false;
+    };
+    cont.appendChild(b);
+  });
+}
+
+function cargarPreguntaTipeo(q) {
+  detenerT();
+  T.q = q;
+  T.chars = Array.from(q.respuesta.normalize('NFC'));
+  T.total = T.chars.filter(esTipeable).length;
+  T.pos = 0;
+  T.hechos = 0;
+  T.errores = 0;
+  T.estado = 'listo';
+  T.ultimoReg = null;
+  T.pasado = false;
+  $('#t-pregunta').textContent = q.pregunta;
+  setRelojT(0);
+  setBoxT(T.total
+    ? 'Escribí la primera letra para empezar: el reloj arranca con tu primera tecla.'
+    : 'Esta respuesta no tiene letras ni números para escribir. Probá con la otra actividad.');
+  $('#t-resultado').hidden = true;
+  renderListaTipeo();
+  renderScores(CFG.tipeo);
+  progresoT();
+  botonesT();
+}
+
+function setRelojT(ms, clase) {
+  const r = $('#t-reloj');
+  r.textContent = formatoTiempo(ms);
+  r.className = 'reloj' + (clase ? ' ' + clase : '');
+}
+function setBoxT(txt) {
+  const b = $('#t-respuesta');
+  b.textContent = '';
+  if (txt) b.append(el('span', 'hint', txt));
+  b.scrollTop = 0;
+}
+function progresoT() {
+  $('#t-prog-txt').textContent = `Letra ${T.hechos} / ${T.total}`;
+  $('#t-barra').style.width = (T.total ? (T.hechos / T.total) * 100 : 0) + '%';
+}
+function botonesT() {
+  const fin = T.estado === 'fin';
+  $('#t-teclado').hidden = fin;
+  $('#t-main').hidden = !fin;
+  $('#t-teclado').className = 'teclado' + (T.estado === 'sinPregunta' ? ' apagado' : '');
+  $('#t-ver').disabled = T.estado === 'sinPregunta';
+  $('#t-cancelar').disabled = T.estado !== 'corriendo';
+}
+
+function renderTipeo() {
+  const box = $('#t-respuesta');
+  box.textContent = '';
+  box.append(document.createTextNode(T.chars.slice(0, T.pos).join('')));
+  if (T.pos < T.chars.length) box.append(el('span', 'cursor'));
+  box.scrollTop = box.scrollHeight;
+}
+
+/** Muestra de una vez los signos y espacios que siguen (no hay que escribirlos). */
+function avanzarAuto() {
+  while (T.pos < T.chars.length && !esTipeable(T.chars[T.pos])) T.pos++;
+}
+
+function bucleT() {
+  if (T.estado !== 'corriendo') return;
+  const t = performance.now() - T.t0;
+  const r = $('#t-reloj');
+  r.textContent = formatoTiempo(t);
+  const pas = T.rec !== null && t > T.rec;
+  if (pas !== T.pasado) { T.pasado = pas; r.className = 'reloj' + (pas ? ' pasado' : ''); }
+  T.raf = requestAnimationFrame(bucleT);
+}
+function detenerT() {
+  cancelAnimationFrame(T.raf);
+  if (T.wake) { try { T.wake.release(); } catch (e) { /* nada */ } T.wake = null; }
+}
+
+function empezarTipeo() {
+  T.pos = 0;
+  T.hechos = 0;
+  T.errores = 0;
+  T.ultimoReg = null;
+  T.pasado = false;
+  avanzarAuto();
+  renderTipeo();
+  $('#t-resultado').hidden = true;
+  T.estado = 'corriendo';
+  T.t0 = performance.now();
+  setRelojT(0);
+  progresoT();
+  botonesT();
+  if ('wakeLock' in navigator) {
+    navigator.wakeLock.request('screen').then(l => { T.wake = l; }).catch(() => {});
+  }
+  T.raf = requestAnimationFrame(bucleT);
+}
+
+function destelloError(k) {
+  const box = $('#t-respuesta');
+  box.classList.add('error');
+  setTimeout(() => box.classList.remove('error'), 300);
+  const b = T.teclas[k];
+  if (b) {
+    b.classList.add('mal');
+    setTimeout(() => b.classList.remove('mal'), 260);
+  }
+}
+
+function tocarTecla(raw) {
+  if (T.estado === 'sinPregunta') { aviso('Elegí una pregunta de la lista.'); return; }
+  if (T.estado === 'fin' || !T.total) return;
+  const k = normTecla(raw);
+  if (k.length !== 1 || !TECLAS_OK.includes(k)) return;
+  audio(); // el navegador solo permite sonido después de un toque del usuario
+  if (T.estado === 'listo' || T.estado === 'viendo') empezarTipeo();
+
+  if (k === normTecla(T.chars[T.pos])) {
+    T.pos++;
+    T.hechos++;
+    avanzarAuto();
+    renderTipeo();
+    progresoT();
+    if (T.pos >= T.chars.length) terminarTipeo();
+  } else {
+    T.errores++;
+    sonidoError();
+    destelloError(k);
+  }
+}
+
+async function terminarTipeo() {
+  const ms = Math.round(performance.now() - T.t0);
+  detenerT();
+  T.estado = 'fin';
+  T.bloqueo = performance.now() + 900; // evita reiniciar por un toque de más
+  const prev = E.tiemposTipeo[T.q.id] ? [...E.tiemposTipeo[T.q.id]] : [];
+  const res = evaluar(prev, ms);
+  const reg = { f: ahora(), ms, p: T.total, e: T.errores };
+  (E.tiemposTipeo[T.q.id] = E.tiemposTipeo[T.q.id] || []).push(reg);
+  T.ultimoReg = reg;
+  setRelojT(ms, res.clase);
+  const r = $('#t-resultado');
+  r.className = 'resultado ' + res.clase;
+  r.textContent = '';
+  const err = T.errores ? ` Errores: ${T.errores}.` : ' ¡Sin errores!';
+  r.append(el('b', '', res.titulo), document.createTextNode(res.detalle + err));
+  r.hidden = false;
+  renderScores(CFG.tipeo, res.clase === 'record');
+  botonesT();
+  r.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  await guardarEstado();
+}
+
+function reintentarT() {
+  if (T.estado !== 'fin' || performance.now() < T.bloqueo) return;
+  cargarPreguntaTipeo(T.q);
+}
+
+function cancelarTipeo() {
+  if (T.estado !== 'corriendo') return;
+  cargarPreguntaTipeo(T.q);
+  setBoxT('Intento cancelado. Escribí la primera letra para volver a empezar.');
+}
+
+async function verRespuestaT() {
+  if (!T.q) return;
+  if (T.estado === 'corriendo') {
+    if (!(await confirmar('Ver respuesta', 'Si la mostrás, este intento se cancela sin guardarse.', 'Mostrar', 'primary'))) return;
+  }
+  detenerT();
+  T.estado = 'viendo';
+  T.pos = 0;
+  T.hechos = 0;
+  setRelojT(0);
+  $('#t-resultado').hidden = true;
+  const box = $('#t-respuesta');
+  box.textContent = T.q.respuesta;
+  box.scrollTop = 0;
+  progresoT();
+  botonesT();
+}
+
+function enlazarTipeo() {
+  $('#act-volver').onclick = volverMenu;
+  $('#act-palabras').onclick = () => abrirSeleccion('palabras');
+  $('#act-tipeo').onclick = () => abrirSeleccion('tipeo');
+  $('#t-volver').onclick = volverMenu;
+  $('#t-sonido').onclick = () => {
+    E.silencio = !E.silencio;
+    actualizarSonido();
+    guardarEstado();
+    if (!E.silencio) audio();
+  };
+  $('#t-ver').onclick = verRespuestaT;
+  $('#t-cancelar').onclick = cancelarTipeo;
+  $('#t-main').onclick = reintentarT;
+  $('#t-h-ultimos').onclick = () => { T.vistaHist = 'ultimos'; renderHistorial(CFG.tipeo); };
+  $('#t-h-mejores').onclick = () => { T.vistaHist = 'mejores'; renderHistorial(CFG.tipeo); };
 }
 
 /* =====================================================================
@@ -780,7 +1121,7 @@ function descargar(blob, nombre) {
 }
 
 function exportarCopia() {
-  const datos = { app: 'muestra-palabras', v: 1, exportado: ahora(), arbol: E.arbol, preguntas: E.preguntas, tiempos: E.tiempos };
+  const datos = { app: 'muestra-palabras', v: 1, exportado: ahora(), arbol: E.arbol, preguntas: E.preguntas, tiempos: E.tiempos, tiemposTipeo: E.tiemposTipeo };
   const d = new Date();
   const nombre = `MuestraPalabras-copia-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}.json`;
   descargar(new Blob([JSON.stringify(datos, null, 1)], { type: 'application/json' }), nombre);
@@ -799,14 +1140,18 @@ async function restaurarCopia(file) {
     mergeArbol(E.arbol, datos.arbol);
     nuevas.forEach(q => { agregarRuta(q.ruta); E.preguntas.push(q); });
     let tiemposAgregados = 0;
-    Object.entries(datos.tiempos || {}).forEach(([id, lista]) => {
-      if (!Array.isArray(lista)) return;
-      const actuales = (E.tiempos[id] = E.tiempos[id] || []);
-      const claves = new Set(actuales.map(x => x.f + '|' + x.ms));
-      lista.forEach(x => {
-        if (x && isFinite(x.ms) && !claves.has(x.f + '|' + x.ms)) { actuales.push(x); tiemposAgregados++; }
+    const fusionar = (dst, src) => {
+      Object.entries(src || {}).forEach(([id, lista]) => {
+        if (!Array.isArray(lista)) return;
+        const actuales = (dst[id] = dst[id] || []);
+        const claves = new Set(actuales.map(x => x.f + '|' + x.ms));
+        lista.forEach(x => {
+          if (x && isFinite(x.ms) && !claves.has(x.f + '|' + x.ms)) { actuales.push(x); tiemposAgregados++; }
+        });
       });
-    });
+    };
+    fusionar(E.tiempos, datos.tiempos);
+    fusionar(E.tiemposTipeo, datos.tiemposTipeo);
     await guardarEstado();
     D.sel.refrescar(E.ultima);
     est.textContent = `Restauradas ${nuevas.length} preguntas y ${tiemposAgregados} tiempos.`;
@@ -888,7 +1233,7 @@ async function importarTxt(files) {
 function enlazar() {
   // menú
   $('#m-crear').onclick = abrirCrear;
-  $('#m-evaluar').onclick = abrirSeleccion;
+  $('#m-evaluar').onclick = abrirActividades;
   $('#m-datos').onclick = abrirDatos;
 
   // crear
@@ -899,18 +1244,18 @@ function enlazar() {
   $('#c-respuesta').addEventListener('input', actualizarContador);
 
   // seleccionar
-  $('#sel-volver').onclick = volverMenu;
+  $('#sel-volver').onclick = () => entrar('act');
   $('#sel-continuar').onclick = () => {
     const ruta = S.sel.ruta();
-    if (ruta && pregs(ruta).length) iniciarEval(ruta);
+    if (ruta && pregs(ruta).length) (MODO === 'tipeo' ? iniciarTipeo : iniciarEval)(ruta);
   };
 
   // evaluación
   $('#e-volver').onclick = volverMenu;
   $('#e-ver').onclick = verRespuesta;
   $('#e-cancelar').onclick = cancelarIntento;
-  $('#h-ultimos').onclick = () => { V.vistaHist = 'ultimos'; renderHistorial(); };
-  $('#h-mejores').onclick = () => { V.vistaHist = 'mejores'; renderHistorial(); };
+  $('#e-h-ultimos').onclick = () => { V.vistaHist = 'ultimos'; renderHistorial(CFG.palabras); };
+  $('#e-h-mejores').onclick = () => { V.vistaHist = 'mejores'; renderHistorial(CFG.palabras); };
   const main = $('#e-main');
   main.addEventListener('pointerdown', e => { e.preventDefault(); accionPrincipal(); });
   $('#e-respuesta').addEventListener('click', () => { if (V.estado === 'corriendo') revelar(); });
@@ -943,6 +1288,9 @@ function enlazar() {
     } else if (actual === 'crear' && (e.ctrlKey || e.metaKey)) {
       if (e.key.toLowerCase() === 's') { e.preventDefault(); guardarPregunta(); }
       else if (e.key.toLowerCase() === 'n') { e.preventDefault(); $('#c-nueva').click(); }
+    } else if (actual === 'tipeo') {
+      if (e.key === 'Escape') cancelarTipeo();
+      else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); tocarTecla(e.key); }
     }
   });
 }
@@ -951,12 +1299,14 @@ function enlazar() {
   try {
     const guardado = await DB.leer();
     if (guardado) E = Object.assign(E, guardado);
+    E.tiemposTipeo = E.tiemposTipeo || {};
   } catch (err) {
     almacenamientoOk = false;
     aviso('No se pudo abrir el almacenamiento del navegador.');
   }
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* nada */ }
   enlazar();
+  enlazarTipeo();
   history.replaceState({ n: 'menu' }, '');
   mostrar('menu');
   refrescarMenu();

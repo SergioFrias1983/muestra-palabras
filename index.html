@@ -18,11 +18,29 @@
 <!-- ============ MENÚ ============ -->
 <section id="s-menu" class="screen">
   <h1>Muestra Palabras</h1>
-  <p class="muted">Estudiá definiciones revelándolas palabra por palabra, contra el reloj.</p>
+  <p class="muted">Estudiá definiciones contra el reloj, revelándolas palabra por palabra o escribiéndolas letra por letra.</p>
   <button class="btn big" id="m-crear">Crear preguntas</button>
   <button class="btn big primary" id="m-evaluar">Evaluar lo aprendido</button>
   <button class="btn big" id="m-datos">Copia de seguridad e importar</button>
   <p id="m-resumen" class="muted centro"></p>
+</section>
+
+<!-- ============ ELEGIR ACTIVIDAD ============ -->
+<section id="s-act" class="screen" hidden>
+  <header class="bar">
+    <button class="btn small" id="act-volver">‹ Menú</button>
+    <h2>Elegí una actividad</h2>
+  </header>
+  <button class="actividad" id="act-palabras">
+    <span class="act-ico">⏱️</span>
+    <span class="act-tit">Revelar palabras</span>
+    <span class="act-desc">Con el reloj corriendo, tocá para ir descubriendo la respuesta palabra por palabra. Intentá batir tu récord.</span>
+  </button>
+  <button class="actividad" id="act-tipeo">
+    <span class="act-ico">⌨️</span>
+    <span class="act-tit">Escribir letra por letra</span>
+    <span class="act-desc">Descubrí la respuesta tipeando cada letra. Si te equivocás suena un aviso y no avanzás hasta acertar.</span>
+  </button>
 </section>
 
 <!-- ============ CREAR PREGUNTAS ============ -->
@@ -51,15 +69,16 @@
 <!-- ============ ELEGIR QUÉ EVALUAR ============ -->
 <section id="s-sel" class="screen" hidden>
   <header class="bar">
-    <button class="btn small" id="sel-volver">‹ Menú</button>
+    <button class="btn small" id="sel-volver">‹ Actividades</button>
     <h2>¿Qué querés evaluar?</h2>
   </header>
+  <p id="sel-modo" class="muted centro"></p>
   <div id="sel-ubicacion" class="ubic"></div>
   <p id="sel-cuenta" class="muted centro">—</p>
   <button class="btn big primary" id="sel-continuar" disabled>Continuar</button>
 </section>
 
-<!-- ============ EVALUACIÓN ============ -->
+<!-- ============ ACTIVIDAD 1: REVELAR PALABRAS ============ -->
 <section id="s-eval" class="screen eval" hidden>
   <header class="bar">
     <button class="btn small" id="e-volver">‹ Menú</button>
@@ -95,8 +114,8 @@
     <div class="hist-cab">
       <h3>Historial</h3>
       <div class="seg">
-        <button id="h-ultimos" class="activo">Últimos</button>
-        <button id="h-mejores">Mejores</button>
+        <button id="e-h-ultimos" class="activo">Últimos</button>
+        <button id="e-h-mejores">Mejores</button>
       </div>
     </div>
     <div id="e-hist"></div>
@@ -107,6 +126,59 @@
     <div class="row">
       <button class="btn grow" id="e-ver">Ver respuesta</button>
       <button class="btn grow" id="e-cancelar">Cancelar</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ ACTIVIDAD 2: ESCRIBIR LETRA POR LETRA ============ -->
+<section id="s-tipeo" class="screen eval" hidden>
+  <header class="bar">
+    <button class="btn small" id="t-volver">‹ Menú</button>
+    <div id="t-ruta" class="ruta"></div>
+    <button class="btn small sonido" id="t-sonido">🔊 Sonido</button>
+  </header>
+
+  <div class="marcador">
+    <div id="t-reloj" class="reloj">00:00.00</div>
+    <div class="fila-rec">
+      <div id="t-rec" class="rec">
+        <div class="rec-linea">
+          <span class="rec-etq">★ RÉCORD</span>
+          <span id="t-rec-tiempo" class="rec-tiempo">—</span>
+        </div>
+        <span id="t-rec-fecha" class="rec-fecha"></span>
+      </div>
+      <div id="t-prog-txt" class="prog-txt">Letra 0 / 0</div>
+    </div>
+    <div class="barra"><div id="t-barra"></div></div>
+  </div>
+
+  <details id="t-preguntas" class="panel">
+    <summary id="t-preguntas-titulo">Preguntas</summary>
+    <div id="t-lista" class="lista"></div>
+  </details>
+
+  <div id="t-pregunta" class="pregunta">Elegí una pregunta de la lista</div>
+  <div id="t-respuesta" class="respuesta"></div>
+  <div id="t-resultado" class="resultado" hidden></div>
+
+  <section class="panel historial">
+    <div class="hist-cab">
+      <h3>Historial</h3>
+      <div class="seg">
+        <button id="t-h-ultimos" class="activo">Últimos</button>
+        <button id="t-h-mejores">Mejores</button>
+      </div>
+    </div>
+    <div id="t-hist"></div>
+  </section>
+
+  <div class="acciones">
+    <div id="t-teclado" class="teclado apagado"></div>
+    <button class="btn primary huge" id="t-main" hidden>REINTENTAR</button>
+    <div class="row">
+      <button class="btn grow" id="t-ver">Ver respuesta</button>
+      <button class="btn grow" id="t-cancelar">Cancelar</button>
     </div>
   </div>
 </section>
@@ -127,7 +199,7 @@
   <input type="file" id="d-file-json" accept=".json,application/json" hidden>
 
   <h3>Importar preguntas desde la PC (.txt)</h3>
-  <p class="muted">Pasá a este celular los .txt de tu carpeta "Preguntas" (por ejemplo por Drive o por cable). Elegí abajo dónde guardarlas y seleccioná los archivos. Si incluís también los de "Historial de Tiempos" (los que terminan en <em>- tiempos.txt</em>), se importan los tiempos.</p>
+  <p class="muted">Pasá a este celular los .txt de tu carpeta "Preguntas" (por ejemplo por Drive o por cable). Elegí abajo dónde guardarlas y seleccioná los archivos. Si incluís también los de "Historial de Tiempos" (los que terminan en <em>- tiempos.txt</em>), se importan los tiempos de la actividad "Revelar palabras".</p>
   <div id="d-ubicacion" class="ubic"></div>
   <button class="btn big" id="d-importar">Elegir archivos .txt…</button>
   <input type="file" id="d-file-txt" accept=".txt,text/plain" multiple hidden>
