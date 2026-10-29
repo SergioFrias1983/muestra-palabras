@@ -446,7 +446,10 @@ function actualizarCuenta() {
 const V = {
   ruta: null, q: null, tokens: [], idxPal: [], n: 0, k: 0,
   estado: 'sinPregunta', // sinPregunta | listo | corriendo | fin | viendo
-  t0: 0, raf: 0, bloqueo: 0, ultimoReg: null, wake: null
+  t0: 0, raf: 0, bloqueo: 0, ultimoReg: null, wake: null,
+  rec: null,            // mejor tiempo (ms) de la pregunta elegida
+  pasado: false,        // true si el reloj ya superó el récord durante un intento
+  vistaHist: 'ultimos'  // 'ultimos' | 'mejores'
 };
 
 function iniciarEval(ruta) {
@@ -536,7 +539,12 @@ function botones() {
 
 function bucle() {
   if (V.estado !== 'corriendo') return;
-  setReloj(performance.now() - V.t0);
+  const t = performance.now() - V.t0;
+  const r = $('#e-reloj');
+  r.textContent = formatoTiempo(t);
+  // El reloj cambia de color apenas superás tu récord: ya no se puede batir en este intento.
+  const pas = V.rec !== null && t > V.rec;
+  if (pas !== V.pasado) { V.pasado = pas; r.className = 'reloj' + (pas ? ' pasado' : ''); }
   V.raf = requestAnimationFrame(bucle);
 }
 function detener() {
@@ -551,6 +559,7 @@ function empezar() {
   $('#e-resultado').hidden = true;
   V.estado = 'corriendo';
   V.t0 = performance.now();
+  V.pasado = false;
   setReloj(0);
   progreso();
   botones();
@@ -588,10 +597,10 @@ function evaluar(prev, ms) {
   }
   if (ms < prom) {
     return { clase: 'bueno', titulo: '¡BUEN TIEMPO!',
-      detalle: `Mejor que tu promedio. Quedaste a ${segs(ms - mejor)} del récord. Puesto ${puesto} de ${todos.length}.` };
+      detalle: `Mejor que tu nivel habitual. A ${segs(ms - mejor)} del récord. Puesto ${puesto} de ${todos.length}.` };
   }
   return { clase: 'malo', titulo: 'TIEMPO MALO',
-    detalle: `Peor que tu promedio por ${segs(ms - prom)}. Puesto ${puesto} de ${todos.length}.` };
+    detalle: `Por debajo de tu nivel habitual. A ${segs(ms - mejor)} del récord. Puesto ${puesto} de ${todos.length}.` };
 }
 
 async function terminar() {
@@ -610,7 +619,7 @@ async function terminar() {
   r.textContent = '';
   r.append(el('b', '', res.titulo), document.createTextNode(res.detalle));
   r.hidden = false;
-  renderScores();
+  renderScores(res.clase === 'record');
   botones();
   r.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   await guardarEstado();
@@ -664,29 +673,71 @@ function accionPrincipal() {
   }
 }
 
-function renderScores() {
-  const cont = $('#e-score');
+function fechaHora(f) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2}))?/.exec(f || '');
+  if (!m) return f || '';
+  return `${m[3]}/${m[2]}/${m[1].slice(2)}` + (m[4] ? ` ${m[4]}:${m[5]}` : '');
+}
+
+/** Récord de la pregunta elegida: siempre visible arriba, junto al reloj. */
+function renderRecord(nuevo) {
+  const t = V.q ? (E.tiempos[V.q.id] || []) : [];
+  const caja = $('#e-rec');
+  if (!t.length) {
+    V.rec = null;
+    $('#e-rec-tiempo').textContent = '—';
+    $('#e-rec-fecha').textContent = V.q ? 'Todavía sin récord' : '';
+    return;
+  }
+  const mejor = t.reduce((m, x) => (x.ms < m.ms ? x : m), t[0]);
+  V.rec = mejor.ms;
+  $('#e-rec-tiempo').textContent = formatoTiempo(mejor.ms);
+  $('#e-rec-fecha').textContent = fechaHora(mejor.f);
+  caja.className = 'rec';
+  if (nuevo) { void caja.offsetWidth; caja.className = 'rec nuevo'; }
+}
+
+/** Tabla de historial (abajo): últimos intentos o los mejores. */
+function renderHistorial() {
+  const cont = $('#e-hist');
   cont.innerHTML = '';
+  $('#h-ultimos').className = V.vistaHist === 'ultimos' ? 'activo' : '';
+  $('#h-mejores').className = V.vistaHist === 'mejores' ? 'activo' : '';
   const t = V.q ? (E.tiempos[V.q.id] || []) : [];
   if (!t.length) {
     cont.append(el('p', 'muted centro', V.q ? 'Todavía no hay tiempos para esta pregunta.' : '—'));
     return;
   }
-  const orden = [...t].sort((a, b) => a.ms - b.ms);
-  const mejor = orden[0];
-  const prom = t.reduce((s, x) => s + x.ms, 0) / t.length;
-  const kv = (k, v) => { const d = el('div', 'kv'); d.append(el('span', '', k), el('span', '', v)); return d; };
-  cont.append(
-    kv('Mejor tiempo', `${formatoTiempo(mejor.ms)} (${fechaCorta(mejor.f)})`),
-    kv('Promedio', formatoTiempo(prom)),
-    kv('Intentos', String(t.length))
-  );
-  cont.append(el('h4', '', 'Los 10 mejores'));
-  const ol = el('ol');
-  orden.slice(0, 10).forEach(x => {
-    ol.append(el('li', x === V.ultimoReg ? 'nuevo' : '', `${formatoTiempo(x.ms)}  ·  ${fechaCorta(x.f)}`));
+  const rec = Math.min(...t.map(x => x.ms));
+  const filas = V.vistaHist === 'mejores'
+    ? [...t].sort((a, b) => a.ms - b.ms).slice(0, 10).map((x, i) => ({ x, n: i + 1 }))
+    : t.map((x, i) => ({ x, n: i + 1 })).reverse().slice(0, 15);
+
+  const tabla = el('table', 'tabla');
+  const cab = el('tr');
+  [[V.vistaHist === 'mejores' ? 'Puesto' : 'N°', ''], ['Tiempo', ''], ['Fecha', ''], ['vs récord', 'd']]
+    .forEach(([txt, cls]) => cab.append(el('th', cls, txt)));
+  const thead = el('thead'); thead.append(cab); tabla.append(thead);
+
+  const tbody = el('tbody');
+  filas.forEach(({ x, n }) => {
+    const esRec = x.ms === rec;
+    const tr = el('tr', (esRec ? 'es-rec ' : '') + (x === V.ultimoReg ? 'nuevo' : ''));
+    tr.append(
+      el('td', '', String(n)),
+      el('td', 't', formatoTiempo(x.ms)),
+      el('td', 'f', fechaHora(x.f)),
+      el('td', 'd', esRec ? '★ récord' : '+' + ((x.ms - rec) / 1000).toFixed(2) + ' s')
+    );
+    tbody.append(tr);
   });
-  cont.append(ol);
+  tabla.append(tbody);
+  cont.append(tabla);
+}
+
+function renderScores(nuevoRecord) {
+  renderRecord(nuevoRecord);
+  renderHistorial();
 }
 
 /* =====================================================================
@@ -858,6 +909,8 @@ function enlazar() {
   $('#e-volver').onclick = volverMenu;
   $('#e-ver').onclick = verRespuesta;
   $('#e-cancelar').onclick = cancelarIntento;
+  $('#h-ultimos').onclick = () => { V.vistaHist = 'ultimos'; renderHistorial(); };
+  $('#h-mejores').onclick = () => { V.vistaHist = 'mejores'; renderHistorial(); };
   const main = $('#e-main');
   main.addEventListener('pointerdown', e => { e.preventDefault(); accionPrincipal(); });
   $('#e-respuesta').addEventListener('click', () => { if (V.estado === 'corriendo') revelar(); });
