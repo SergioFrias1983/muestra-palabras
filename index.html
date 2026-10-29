@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#121212">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Muestra Palabras">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Muestra Palabras</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ============ MENÚ ============ -->
+<section id="s-menu" class="screen">
+  <h1>Muestra Palabras</h1>
+  <p class="muted">Estudiá definiciones revelándolas palabra por palabra, contra el reloj.</p>
+  <button class="btn big" id="m-crear">Crear preguntas</button>
+  <button class="btn big primary" id="m-evaluar">Evaluar lo aprendido</button>
+  <button class="btn big" id="m-datos">Copia de seguridad e importar</button>
+  <p id="m-resumen" class="muted centro"></p>
+</section>
+
+<!-- ============ CREAR PREGUNTAS ============ -->
+<section id="s-crear" class="screen" hidden>
+  <header class="bar">
+    <button class="btn small" id="c-volver">‹ Menú</button>
+    <h2>Crear preguntas</h2>
+  </header>
+  <div id="c-ubicacion" class="ubic"></div>
+
+  <h3 id="c-lista-titulo">Preguntas (0)</h3>
+  <div id="c-lista" class="lista"></div>
+  <button class="btn" id="c-nueva">+ Nueva pregunta</button>
+
+  <h3 id="c-edit-titulo">Pregunta (nueva)</h3>
+  <label for="c-pregunta">Pregunta</label>
+  <textarea id="c-pregunta" rows="3" placeholder="Escribí la pregunta…"></textarea>
+  <label for="c-respuesta">Respuesta <span id="c-palabras" class="muted">· 0 palabras</span></label>
+  <textarea id="c-respuesta" rows="8" placeholder="Escribí la respuesta…"></textarea>
+  <div class="row">
+    <button class="btn success grow" id="c-guardar">Guardar</button>
+    <button class="btn danger" id="c-eliminar">Eliminar</button>
+  </div>
+</section>
+
+<!-- ============ ELEGIR QUÉ EVALUAR ============ -->
+<section id="s-sel" class="screen" hidden>
+  <header class="bar">
+    <button class="btn small" id="sel-volver">‹ Menú</button>
+    <h2>¿Qué querés evaluar?</h2>
+  </header>
+  <div id="sel-ubicacion" class="ubic"></div>
+  <p id="sel-cuenta" class="muted centro">—</p>
+  <button class="btn big primary" id="sel-continuar" disabled>Continuar</button>
+</section>
+
+<!-- ============ EVALUACIÓN ============ -->
+<section id="s-eval" class="screen eval" hidden>
+  <header class="bar">
+    <button class="btn small" id="e-volver">‹ Menú</button>
+    <div id="e-ruta" class="ruta"></div>
+  </header>
+
+  <details id="e-preguntas" class="panel">
+    <summary id="e-preguntas-titulo">Preguntas</summary>
+    <div id="e-lista" class="lista"></div>
+  </details>
+
+  <div id="e-pregunta" class="pregunta">Elegí una pregunta de la lista</div>
+  <div id="e-reloj" class="reloj">00:00.00</div>
+  <div id="e-prog-txt" class="centro muted">Palabra 0 / 0</div>
+  <div class="barra"><div id="e-barra"></div></div>
+
+  <div id="e-respuesta" class="respuesta"></div>
+  <div id="e-resultado" class="resultado" hidden></div>
+
+  <section class="panel score">
+    <h3>★ HIGH SCORE ★</h3>
+    <div id="e-score"></div>
+  </section>
+
+  <div class="acciones">
+    <button class="btn primary huge" id="e-main">ELEGÍ UNA PREGUNTA</button>
+    <div class="row">
+      <button class="btn grow" id="e-ver">Ver respuesta</button>
+      <button class="btn grow" id="e-cancelar">Cancelar</button>
+    </div>
+  </div>
+</section>
+
+<!-- ============ DATOS ============ -->
+<section id="s-datos" class="screen" hidden>
+  <header class="bar">
+    <button class="btn small" id="d-volver">‹ Menú</button>
+    <h2>Copia de seguridad e importar</h2>
+  </header>
+
+  <h3>Copia de seguridad</h3>
+  <p class="muted">Guarda todas tus preguntas y tiempos en un archivo. Conviene hacerla de vez en cuando, por si se borran los datos del navegador.</p>
+  <div class="row">
+    <button class="btn grow" id="d-exportar">Exportar copia (.json)</button>
+    <button class="btn grow" id="d-restaurar">Restaurar copia…</button>
+  </div>
+  <input type="file" id="d-file-json" accept=".json,application/json" hidden>
+
+  <h3>Importar preguntas desde la PC (.txt)</h3>
+  <p class="muted">Pasá a este celular los .txt de tu carpeta "Preguntas" (por ejemplo por Drive o por cable). Elegí abajo dónde guardarlas y seleccioná los archivos. Si incluís también los de "Historial de Tiempos" (los que terminan en <em>- tiempos.txt</em>), se importan los tiempos.</p>
+  <div id="d-ubicacion" class="ubic"></div>
+  <button class="btn big" id="d-importar">Elegir archivos .txt…</button>
+  <input type="file" id="d-file-txt" accept=".txt,text/plain" multiple hidden>
+  <p id="d-estado" class="muted"></p>
+
+  <h3>Almacenamiento</h3>
+  <p id="d-persist" class="muted">—</p>
+</section>
+
+<!-- ============ MODAL / AVISO ============ -->
+<div id="modal" hidden>
+  <div class="caja" role="dialog" aria-modal="true">
+    <h3 id="modal-titulo"></h3>
+    <p id="modal-msg"></p>
+    <input type="text" id="modal-input" hidden autocomplete="off">
+    <div id="modal-botones" class="botones"></div>
+  </div>
+</div>
+<div id="toast" hidden></div>
+
+<script src="app.js"></script>
+</body>
+</html>
