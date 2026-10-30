@@ -191,10 +191,72 @@ async function confirmarEnPausa(S2, bucleFn, titulo, mensaje, si, clase, no, cla
   return ok;
 }
 
+/* ---------------- Renombrar / eliminar carpetas completas ---------------- */
+const NIV_ART = ['el área', 'el año / nivel', 'la materia', 'la actividad'];
+const prefijoDe = (ruta, pre) => pre.every((x, i) => ruta[i] === x);
+function nodoEn(path) { let n = E.arbol; for (const p of path) n = n && n[p]; return n; }
+
+/** Borra del árbol las carpetas que quedaron vacías (y sin preguntas) siguiendo esta ruta hacia arriba. */
+function podarVacias(ruta) {
+  for (let i = ruta.length; i >= 1; i--) {
+    const pre = ruta.slice(0, i), n = nodoEn(pre);
+    if (!n || Object.keys(n).length || E.preguntas.some(q => prefijoDe(q.ruta, pre))) break;
+    delete nodoEn(pre.slice(0, -1))[pre[i - 1]];
+  }
+}
+
+async function renombrarCarpeta(pre, nuevo) {
+  const i = pre.length - 1, padre = nodoEn(pre.slice(0, -1));
+  if (Object.keys(padre).some(k => k !== pre[i] && k.toLowerCase() === nuevo.toLowerCase())) {
+    aviso(`Ya existe "${nuevo}" en ese lugar. Elegí otro nombre.`);
+    return false;
+  }
+  padre[nuevo] = padre[pre[i]];
+  delete padre[pre[i]];
+  const t = Date.now();
+  E.preguntas.forEach(q => {
+    if (prefijoDe(q.ruta, pre)) { q.ruta = q.ruta.slice(); q.ruta[i] = nuevo; q.mod = t; }
+  });
+  if (E.ultima && prefijoDe(E.ultima, pre)) { E.ultima = E.ultima.slice(); E.ultima[i] = nuevo; }
+  await guardarEstado();
+  aviso('Renombrado');
+  return true;
+}
+
+async function eliminarCarpeta(pre) {
+  const i = pre.length - 1, nombre = pre[i];
+  const qs = E.preguntas.filter(q => prefijoDe(q.ruta, pre));
+  const nT = qs.reduce((s, q) => s + (E.tiempos[q.id] || []).length + (E.tiemposTipeo[q.id] || []).length, 0);
+  const detalle = qs.length
+    ? `Tiene ${qs.length} pregunta${qs.length === 1 ? '' : 's'}${nT ? ` y ${nT} tiempo${nT === 1 ? '' : 's'} registrado${nT === 1 ? '' : 's'}` : ''}, y se elimina con todo lo que contiene. No se puede deshacer.`
+    : 'No tiene preguntas.';
+  if (!(await confirmar('Eliminar carpeta', `Vas a eliminar ${NIV_ART[i]} "${nombre}".\n${detalle}`, 'Eliminar', 'danger'))) return false;
+  let borrarHist = false;
+  if (nT) {
+    borrarHist = await modal({
+      titulo: 'Historial de tiempos',
+      mensaje: `¿Borrar también los ${nT} tiempo${nT === 1 ? '' : 's'} de esas preguntas?`,
+      botones: [
+        { texto: 'Conservar', valor: false, cancel: true },
+        { texto: 'Borrar historial', valor: true, clase: 'danger' }
+      ]
+    });
+  }
+  const ids = new Set(qs.map(q => q.id));
+  E.preguntas = E.preguntas.filter(q => !ids.has(q.id));
+  if (E.nube && E.nube.url) ids.forEach(id => E.nube.borrados.push(id));
+  if (borrarHist) ids.forEach(id => { delete E.tiempos[id]; delete E.tiemposTipeo[id]; });
+  delete nodoEn(pre.slice(0, -1))[nombre];
+  if (E.ultima && prefijoDe(E.ultima, pre)) E.ultima = pre.slice(0, -1);
+  await guardarEstado();
+  aviso('Carpeta eliminada');
+  return true;
+}
+
 /* ---------------- Selector de 4 listas encadenadas ---------------- */
-function crearSelector(cont, alCambiar) {
+function crearSelector(cont, alCambiar, gestion = false) {
   cont.innerHTML = '';
-  const selects = [], btns = [];
+  const selects = [], btns = [], gests = [];
 
   const api = {
     get: () => selects.map(s => s.value || ''),
@@ -212,6 +274,7 @@ function crearSelector(cont, alCambiar) {
         sel.value = op.includes(quiero) ? quiero : (op[0] || '');
         path.push(sel.value);
         btns[i].disabled = !ok;
+        if (gests[i]) gests[i].disabled = !sel.value;
       }
     }
   };
@@ -226,6 +289,40 @@ function crearSelector(cont, alCambiar) {
     b.type = 'button';
     b.title = 'Nueva carpeta en ' + nom;
     fila.append(sel, b);
+    if (gestion) {
+      const g = el('button', 'btn mas gest', '⋯');
+      g.type = 'button';
+      g.title = 'Renombrar o eliminar ' + NIV_ART[i];
+      g.setAttribute('aria-label', g.title);
+      fila.append(g);
+      gests.push(g);
+      g.addEventListener('click', async () => {
+        const pre = api.get().slice(0, i + 1);
+        if (!pre.every(Boolean)) return;
+        const accion = await modal({
+          titulo: pre[i],
+          mensaje: `¿Qué querés hacer con ${NIV_ART[i]}?`,
+          botones: [
+            { texto: 'Cancelar', valor: null, cancel: true },
+            { texto: 'Renombrar', valor: 'ren', clase: 'primary' },
+            { texto: 'Eliminar', valor: 'del', clase: 'danger' }
+          ]
+        });
+        if (accion === 'ren') {
+          const nuevo = await pedirTexto(`Nuevo nombre para ${NIV_ART[i]}`, pre[i]);
+          if (nuevo === null) return;
+          const limpio = limpiarNombre(nuevo);
+          if (!limpio) { aviso('Ese nombre no es válido.'); return; }
+          if (limpio === pre[i]) return;
+          if (!(await renombrarCarpeta(pre, limpio))) return;
+          api.refrescar([...pre.slice(0, i), limpio, ...api.get().slice(i + 1)]);
+        } else if (accion === 'del') {
+          if (!(await eliminarCarpeta(pre))) return;
+          api.refrescar(pre.slice(0, i));
+        } else return;
+        if (alCambiar) alCambiar(api.get());
+      });
+    }
     campo.append(fila);
     cont.append(campo);
     selects.push(sel);
@@ -309,7 +406,7 @@ function refrescarMenu() {
 const C = { sel: null, ruta: null, editId: null, base: { p: '', r: '' } };
 
 function abrirCrear() {
-  if (!C.sel) C.sel = crearSelector($('#c-ubicacion'), onUbicacionCrear);
+  if (!C.sel) C.sel = crearSelector($('#c-ubicacion'), onUbicacionCrear, true);
   C.sel.refrescar(E.ultima);
   C.ruta = C.sel.ruta();
   formNuevo();
@@ -1441,6 +1538,7 @@ async function sincronizar() {
     const enHoja = new Set(delaHoja.map(q => q.id));
     const porBorrar = new Set(N.borrados);
     let nuevas = 0, actualizadas = 0;
+    const rutasViejas = [];
     delaHoja.forEach(h => {
       if (porBorrar.has(h.id)) return;
       const l = E.preguntas.find(q => q.id === h.id);
@@ -1451,6 +1549,7 @@ async function sincronizar() {
       } else {
         const cambia = l.pregunta !== h.pregunta || l.respuesta !== h.respuesta || l.num !== h.num || !mismaRuta(l.ruta, h.ruta);
         if (cambia) {
+          rutasViejas.push(l.ruta);
           agregarRuta(h.ruta);
           Object.assign(l, { ruta: h.ruta, num: h.num, pregunta: h.pregunta, respuesta: h.respuesta });
           actualizadas++;
@@ -1467,16 +1566,20 @@ async function sincronizar() {
         'Quitar', 'danger', 'Conservar');
       if (ok) {
         const ids = new Set(faltan.map(q => q.id));
+        faltan.forEach(q => rutasViejas.push(q.ruta));
         E.preguntas = E.preguntas.filter(q => !ids.has(q.id));
         quitadas = faltan.length;
       }
     }
 
-    // 4) Tiempos: se agregan los que faltan
+    rutasViejas.forEach(podarVacias);   // carpetas que quedaron vacías por renombres o borrados
+
+    // 4) Tiempos: se agregan los que faltan (solo de preguntas que existen acá)
     subirT.forEach(x => { N.enviados[x.id] = 1; });
+    const hay = new Set(E.preguntas.map(q => q.id));
     let bajados = 0;
     (r.tiempos || []).forEach(t => {
-      if (!t || !t.id || N.enviados[t.id]) return;
+      if (!t || !t.id || N.enviados[t.id] || !hay.has(t.qid)) return;
       N.enviados[t.id] = 1;
       const mapa = t.tipo === 'tipeo' ? E.tiemposTipeo : E.tiempos;
       const lista = (mapa[t.qid] = mapa[t.qid] || []);
