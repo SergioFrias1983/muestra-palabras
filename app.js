@@ -963,16 +963,24 @@ function renderTipeo() {
   box.textContent = '';
   box.append(document.createTextNode(T.chars.slice(0, T.pos).join('')));
   if (T.pos < T.chars.length) box.append(el('span', 'cursor'));
-  box.scrollTop = box.scrollHeight;   // desplaza el cuadro hasta la última letra
-  asegurarVisibleT(box);              // y la página, para que no quede tapado por el teclado
+  ajustarScrollT();
+  // Una vez que el navegador terminó de acomodar el nuevo tamaño, se vuelve a ajustar
+  // (si no, la última línea puede quedar cortada a la mitad).
+  requestAnimationFrame(() => { ajustarScrollT(); requestAnimationFrame(ajustarScrollT); });
 }
 
-/** Si el cuadro de respuesta quedó tapado por el teclado fijo, baja la página lo justo. */
-function asegurarVisibleT(box) {
+/** Lleva el cuadro hasta la última línea y baja la página si el teclado fijo la tapa. */
+function ajustarScrollT() {
+  const box = $('#t-respuesta');
+  if (!box || actual !== 'tipeo') return;
+  box.scrollTop = box.scrollHeight;
   const barra = document.querySelector('#s-tipeo .acciones');
   if (!barra || !box.getBoundingClientRect) return;
-  const hueco = box.getBoundingClientRect().bottom - barra.getBoundingClientRect().top + 8;
-  if (hueco > 0) window.scrollBy(0, hueco);
+  const hueco = box.getBoundingClientRect().bottom - barra.getBoundingClientRect().top + 12;
+  if (hueco > 0) {
+    window.scrollBy(0, hueco);
+    box.scrollTop = box.scrollHeight;
+  }
 }
 
 /** Muestra de una vez los signos y espacios que siguen (no hay que escribirlos). */

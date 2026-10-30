@@ -101,6 +101,7 @@ textarea{resize:vertical;line-height:1.5}
 .respuesta{min-height:140px;max-height:34vh;overflow:auto;white-space:pre-wrap;word-wrap:break-word;
   background:var(--s1);border:1px solid var(--borde);border-radius:var(--r);padding:16px;font-size:1.2rem;line-height:1.65;
   user-select:none;-webkit-user-select:none;touch-action:pan-y}
+#t-respuesta{padding-bottom:26px}
 .respuesta .ultima{color:var(--cel);font-weight:600}
 .respuesta .hint{color:var(--muted);font-size:1rem}
 
