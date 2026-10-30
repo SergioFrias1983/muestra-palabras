@@ -22,6 +22,8 @@
   <button class="btn big" id="m-crear">Crear preguntas</button>
   <button class="btn big primary" id="m-evaluar">Evaluar lo aprendido</button>
   <button class="btn big" id="m-datos">Copia de seguridad e importar</button>
+  <button class="btn big" id="m-sync" hidden>☁️ Sincronizar con Google Sheet</button>
+  <p id="m-sync-info" class="muted centro"></p>
   <p id="m-resumen" class="muted centro"></p>
 </section>
 
@@ -206,6 +208,20 @@
   <button class="btn big" id="d-importar">Elegir archivos .txt…</button>
   <input type="file" id="d-file-txt" accept=".txt,text/plain" multiple hidden>
   <p id="d-estado" class="muted"></p>
+
+  <h3>Nube (Google Sheet)</h3>
+  <p class="muted">Guardá tus preguntas y tiempos en una hoja de Google y compartilos entre el celular y la notebook. Pegá la dirección de la aplicación web del script y la clave que elegiste en él.</p>
+  <label for="n-url">Dirección de la aplicación web (termina en /exec)</label>
+  <input type="text" id="n-url" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="https://script.google.com/macros/s/…/exec">
+  <label for="n-clave">Clave</label>
+  <input type="password" id="n-clave" autocomplete="off">
+  <label for="n-disp">Nombre de este dispositivo</label>
+  <input type="text" id="n-disp" autocomplete="off" placeholder="Celular, Notebook…">
+  <div class="row">
+    <button class="btn grow" id="n-guardar">Guardar conexión</button>
+    <button class="btn primary grow" id="n-sync">Sincronizar</button>
+  </div>
+  <p id="n-estado" class="muted"></p>
 
   <h3>Almacenamiento</h3>
   <p id="d-persist" class="muted">—</p>

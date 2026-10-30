@@ -90,7 +90,8 @@ const DB = {
    preguntas: [{ id, ruta:[a,b,c,d], num, pregunta, respuesta, archivo? }]
    tiempos:   { idPregunta: [{ f:'YYYY-MM-DD HH:MM:SS', ms, p }] }
    ultima:    última ubicación elegida */
-let E = { v: 1, arbol: {}, preguntas: [], tiempos: {}, tiemposTipeo: {}, ultima: [], silencio: false };
+let E = { v: 1, arbol: {}, preguntas: [], tiempos: {}, tiemposTipeo: {}, ultima: [], silencio: false, nube: null };
+const NUBE_BASE = () => ({ url: '', clave: '', disp: '', vistos: [], borrados: [], enviados: {}, ultimaSync: 0, ultima: '' });
 let almacenamientoOk = true;
 
 async function guardarEstado() {
@@ -295,6 +296,7 @@ window.addEventListener('popstate', async () => {
 });
 
 function refrescarMenu() {
+  refrescarNube();
   const nAct = new Set(E.preguntas.map(q => q.ruta.join('/'))).size;
   $('#m-resumen').textContent = E.preguntas.length
     ? `${E.preguntas.length} pregunta${E.preguntas.length === 1 ? '' : 's'} en ${nAct} actividad${nAct === 1 ? '' : 'es'}`
@@ -402,12 +404,13 @@ async function guardarPregunta() {
     const q = E.preguntas.find(x => x.id === C.editId);
     q.pregunta = p;
     q.respuesta = r;
+    q.mod = Date.now();
     await guardarEstado();
     aviso('Cambios guardados');
     cargarEnForm(q);
   } else {
     const num = pregs(C.ruta).reduce((m, q) => Math.max(m, q.num), 0) + 1;
-    E.preguntas.push({ id: uid(), ruta: [...C.ruta], num, pregunta: p, respuesta: r });
+    E.preguntas.push({ id: uid(), ruta: [...C.ruta], num, pregunta: p, respuesta: r, mod: Date.now() });
     await guardarEstado();
     aviso(`Pregunta ${pad(num, 3)} guardada`);
     formNuevo();
@@ -432,6 +435,7 @@ async function eliminarPregunta() {
     });
   }
   E.preguntas = E.preguntas.filter(x => x.id !== q.id);
+  if (E.nube && E.nube.url) E.nube.borrados.push(q.id);
   if (borrarHist) { delete E.tiempos[q.id]; delete E.tiemposTipeo[q.id]; }
   await guardarEstado();
   aviso('Pregunta eliminada');
@@ -1148,6 +1152,8 @@ function abrirDatos() {
   if (!D.sel) D.sel = crearSelector($('#d-ubicacion'));
   D.sel.refrescar(E.ultima);
   $('#d-estado').textContent = '';
+  $('#n-url').value = E.nube.url; $('#n-clave').value = E.nube.clave; $('#n-disp').value = E.nube.disp;
+  $('#n-estado').textContent = E.nube.ultima ? 'Última sincronización: ' + E.nube.ultima : '';
   estadoPersistencia();
   entrar('datos');
 }
@@ -1269,7 +1275,7 @@ async function importarTxt(files) {
     const usados = new Set(existentes.map(q => q.num));
     let num = parseInt((/Pregunta\s+(\d+)/i.exec(nombre) || [])[1], 10);
     if (!num || usados.has(num)) num = existentes.reduce((m, q) => Math.max(m, q.num), 0) + 1;
-    const q = { id: uid(), ruta: [...ruta], num, pregunta: pr.pregunta, respuesta: pr.respuesta, archivo: nombre };
+    const q = { id: uid(), ruta: [...ruta], num, pregunta: pr.pregunta, respuesta: pr.respuesta, archivo: nombre, mod: Date.now() };
     E.preguntas.push(q);
     nuevas++;
     const t = ts[nombre.toLowerCase()];
@@ -1353,6 +1359,168 @@ function enlazar() {
   });
 }
 
+
+/* =====================================================================
+   NUBE: Google Sheet (a través de un Google Apps Script)
+   - Preguntas: la hoja manda; lo creado/editado acá se sube antes de bajar.
+   - Tiempos: solo se agregan (nunca se pisan), así celular y notebook se complementan.
+   ===================================================================== */
+let nubeOcupada = false;
+const nubeConectada = () => !!(E.nube && E.nube.url && E.nube.clave);
+
+function refrescarNube() {
+  const on = nubeConectada();
+  $('#m-sync').hidden = !on;
+  $('#m-sync-info').textContent = on
+    ? (E.nube.ultima ? 'Última sincronización: ' + E.nube.ultima.slice(0, 16) : 'Todavía no sincronizaste.')
+    : '';
+}
+
+function guardarConexion() {
+  const url = $('#n-url').value.trim(), clave = $('#n-clave').value.trim(), disp = $('#n-disp').value.trim();
+  if (url && !/^https:\/\/script\.google\.com\/.+\/exec\/?$/.test(url)) {
+    $('#n-estado').textContent = 'La dirección debe empezar con https://script.google.com/ y terminar en /exec';
+    return false;
+  }
+  if (url !== E.nube.url) Object.assign(E.nube, { vistos: [], borrados: [], enviados: {}, ultimaSync: 0, ultima: '' });
+  Object.assign(E.nube, { url, clave, disp });
+  guardarEstado();
+  refrescarNube();
+  $('#n-estado').textContent = url ? 'Conexión guardada.' : 'Conexión quitada.';
+  return true;
+}
+
+const claveTiempo = (qid, tipo, x) => `${qid}|${tipo}|${x.f}|${x.ms}`;
+
+async function sincronizar() {
+  if (nubeOcupada) return;
+  if (!nubeConectada()) { aviso('Primero cargá la dirección y la clave en "Copia de seguridad e importar".'); return; }
+  nubeOcupada = true;
+  const N = E.nube;
+  const botones = document.querySelectorAll('#n-sync, #m-sync');
+  botones.forEach(b => { b.disabled = true; });
+  const est = $('#n-estado');
+  est.textContent = 'Sincronizando…';
+  aviso('Sincronizando…');
+  try {
+    const t0 = Date.now();
+    const vistos = new Set(N.vistos);
+
+    // 1) Qué hay que subir
+    const subirP = E.preguntas
+      .filter(q => !vistos.has(q.id) || (q.mod || 0) > (N.ultimaSync || 0))
+      .map(q => ({ id: q.id, ruta: q.ruta, num: q.num, pregunta: q.pregunta, respuesta: q.respuesta, mod: q.mod || 0 }));
+    const subirT = [];
+    [['palabras', E.tiempos], ['tipeo', E.tiemposTipeo]].forEach(([tipo, mapa]) => {
+      Object.entries(mapa || {}).forEach(([qid, lista]) => (lista || []).forEach(x => {
+        const id = claveTiempo(qid, tipo, x);
+        if (!N.enviados[id]) subirT.push({ id, f: x.f, tipo, qid, ms: x.ms, p: x.p, e: x.e });
+      }));
+    });
+
+    // 2) Un solo viaje: sube lo nuevo y baja el estado completo de la hoja
+    const ctl = new AbortController();
+    const corte = setTimeout(() => ctl.abort(), 60000);
+    let r;
+    try {
+      const resp = await fetch(N.url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({ clave: N.clave, disp: N.disp || 'sin nombre', preguntas: subirP, tiempos: subirT, borrar: N.borrados }),
+        signal: ctl.signal
+      });
+      r = await resp.json();
+    } finally { clearTimeout(corte); }
+    if (!r || !r.ok) {
+      const m = { clave: 'La clave no coincide con la del script.', configurar: 'Falta cambiar la clave dentro del script.' };
+      throw new Error((r && (m[r.error] || r.error)) || 'Respuesta inesperada del script.');
+    }
+
+    // 3) Preguntas: la hoja manda
+    const delaHoja = (r.preguntas || []).filter(q => q && q.id && Array.isArray(q.ruta) && q.ruta.length === 4 && q.pregunta && q.respuesta);
+    const enHoja = new Set(delaHoja.map(q => q.id));
+    const porBorrar = new Set(N.borrados);
+    let nuevas = 0, actualizadas = 0;
+    delaHoja.forEach(h => {
+      if (porBorrar.has(h.id)) return;
+      const l = E.preguntas.find(q => q.id === h.id);
+      if (!l) {
+        agregarRuta(h.ruta);
+        E.preguntas.push({ id: h.id, ruta: h.ruta, num: h.num, pregunta: h.pregunta, respuesta: h.respuesta, mod: h.mod || 0 });
+        nuevas++;
+      } else {
+        const cambia = l.pregunta !== h.pregunta || l.respuesta !== h.respuesta || l.num !== h.num || !mismaRuta(l.ruta, h.ruta);
+        if (cambia) {
+          agregarRuta(h.ruta);
+          Object.assign(l, { ruta: h.ruta, num: h.num, pregunta: h.pregunta, respuesta: h.respuesta });
+          actualizadas++;
+        }
+        l.mod = h.mod || 0;
+      }
+    });
+    // las que estaban en la hoja y ya no están: se borraron allá
+    const faltan = E.preguntas.filter(q => vistos.has(q.id) && !enHoja.has(q.id));
+    let quitadas = 0;
+    if (faltan.length) {
+      const ok = await confirmar('Preguntas quitadas en la hoja',
+        `La hoja ya no tiene ${faltan.length} pregunta${faltan.length === 1 ? '' : 's'} que sí está${faltan.length === 1 ? '' : 'n'} en este dispositivo. ¿Quitar${faltan.length === 1 ? 'la' : 'las'} también de acá? (Los tiempos se conservan.) Si elegís conservarlas, se vuelven a subir a la hoja.`,
+        'Quitar', 'danger', 'Conservar');
+      if (ok) {
+        const ids = new Set(faltan.map(q => q.id));
+        E.preguntas = E.preguntas.filter(q => !ids.has(q.id));
+        quitadas = faltan.length;
+      }
+    }
+
+    // 4) Tiempos: se agregan los que faltan
+    subirT.forEach(x => { N.enviados[x.id] = 1; });
+    let bajados = 0;
+    (r.tiempos || []).forEach(t => {
+      if (!t || !t.id || N.enviados[t.id]) return;
+      N.enviados[t.id] = 1;
+      const mapa = t.tipo === 'tipeo' ? E.tiemposTipeo : E.tiempos;
+      const lista = (mapa[t.qid] = mapa[t.qid] || []);
+      const ms = Number(t.ms);
+      if (!isFinite(ms) || lista.some(x => x.f === t.f && x.ms === ms)) return;
+      const reg = { f: t.f, ms };
+      if (t.p !== '' && t.p != null) reg.p = Number(t.p);
+      if (t.e !== '' && t.e != null) reg.e = Number(t.e);
+      lista.push(reg);
+      bajados++;
+    });
+
+    N.vistos = [...enHoja].filter(id => E.preguntas.some(q => q.id === id));
+    N.borrados = [];
+    N.ultimaSync = t0;
+    N.ultima = ahora();
+    await guardarEstado();
+    if (D.sel) D.sel.refrescar(E.ultima);
+    refrescarMenu();
+
+    const partes = [`Preguntas: ${nuevas} nuevas, ${actualizadas} actualizadas${quitadas ? ', ' + quitadas + ' quitadas' : ''}, ${subirP.length} subidas`,
+      `Tiempos: ${bajados} bajados, ${subirT.length} subidos`];
+    if (r.omitidas) partes.push(`${r.omitidas} fila${r.omitidas === 1 ? '' : 's'} de la hoja incompleta${r.omitidas === 1 ? '' : 's'} (revisá Área, Año, Materia, Actividad, Pregunta y Respuesta)`);
+    est.textContent = partes.join(' · ');
+    aviso('Sincronizado');
+  } catch (err) {
+    let m = err && err.message ? err.message : String(err);
+    if (err && err.name === 'AbortError') m = 'Tardó demasiado. Probá de nuevo con mejor conexión.';
+    else if (err instanceof TypeError) m = 'No se pudo conectar. Revisá tu conexión y que la dirección sea la de la implementación (termina en /exec).';
+    else if (err instanceof SyntaxError) m = 'La respuesta no es la esperada. Revisá que el acceso de la implementación sea "Cualquier persona".';
+    est.textContent = 'No se pudo sincronizar: ' + m;
+    aviso('No se pudo sincronizar');
+  } finally {
+    nubeOcupada = false;
+    botones.forEach(b => { b.disabled = false; });
+  }
+}
+
+function enlazarNube() {
+  $('#m-sync').onclick = sincronizar;
+  $('#n-guardar').onclick = guardarConexion;
+  $('#n-sync').onclick = async () => { if (guardarConexion()) await sincronizar(); };
+}
+
 /* ---- Computadora o celular: se detecta por mouse (puntero preciso con hover) ---- */
 let tecladoPantalla = false;   // en PC el teclado en pantalla empieza oculto
 try { tecladoPantalla = localStorage.getItem('mp_teclado') === '1'; } catch (e) { /* nada */ }
@@ -1377,9 +1545,11 @@ if (mqPC && mqPC.addEventListener) mqPC.addEventListener('change', aplicarModo);
     almacenamientoOk = false;
     aviso('No se pudo abrir el almacenamiento del navegador.');
   }
+  E.nube = Object.assign(NUBE_BASE(), E.nube || {});
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* nada */ }
   enlazar();
   enlazarTipeo();
+  enlazarNube();
   aplicarModo();
   history.replaceState({ n: 'menu' }, '');
   mostrar('menu');

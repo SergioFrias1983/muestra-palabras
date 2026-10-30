@@ -54,7 +54,7 @@ em{color:var(--txt)}
 
 /* ===== Formularios ===== */
 label{display:block;margin:.8em 0 .3em;font-size:.92rem;color:var(--muted)}
-select,textarea,input[type=text]{width:100%;background:var(--bg);color:var(--txt);border:1px solid var(--borde);
+select,textarea,input[type=text],input[type=password]{width:100%;background:var(--bg);color:var(--txt);border:1px solid var(--borde);
   border-radius:12px;padding:12px;font:inherit;font-size:16px;min-height:48px}
 select:focus,textarea:focus,input:focus{outline:2px solid var(--pri);outline-offset:1px}
 textarea{resize:vertical;line-height:1.5}
