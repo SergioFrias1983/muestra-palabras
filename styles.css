@@ -176,3 +176,22 @@ textarea{resize:vertical;line-height:1.5}
 .oculto{visibility:hidden}
 .bar .btn.small{flex:none}
 .bar .btn.sonido{min-width:48px;padding:8px 10px;font-size:1.1rem}
+
+/* ===== Modo computadora (mouse + teclado físico) ===== */
+.solo-pc{display:none!important}
+body.pc .solo-pc{display:inline-flex!important}
+body.pc .ayuda-pc{display:block!important}
+.ayuda-pc{margin:0 0 6px;text-align:center;color:var(--muted);font-size:.9rem}
+body.pc .screen{max-width:860px;padding-left:20px;padding-right:20px}
+body.pc .marcador{margin-left:-20px;margin-right:-20px;padding-left:20px;padding-right:20px}
+body.pc .reloj{font-size:3.4rem;margin:0 0 4px}
+body.pc .respuesta{max-height:46vh;font-size:1.3rem}
+body.pc .btn:hover{filter:brightness(1.12);cursor:pointer}
+body.pc #s-tipeo.sin-teclado #t-teclado{display:none}
+body.pc #s-tipeo.sin-teclado .acciones{padding-top:8px}
+/* pantallas bajas (ventanas de notebook): marcador más compacto */
+@media (max-height:760px){
+  .reloj{font-size:clamp(2.2rem,9vw,3rem)!important}
+  .marcador{padding-top:2px;padding-bottom:6px}
+  .fila-rec{margin-bottom:5px}
+}

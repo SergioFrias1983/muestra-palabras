@@ -1127,6 +1127,12 @@ function enlazarTipeo() {
     if (!E.silencio) audio();
   };
   $('#t-ver').onclick = verRespuestaT;
+  $('#t-tec').onclick = () => {
+    tecladoPantalla = !tecladoPantalla;
+    try { localStorage.setItem('mp_teclado', tecladoPantalla ? '1' : '0'); } catch (e) { /* nada */ }
+    aplicarModo();
+    setTimeout(ajustarScrollT, 50);
+  };
   $('#t-cancelar').onclick = pedirCancelarT;
   $('#t-main').onclick = reintentarT;
   $('#t-h-ultimos').onclick = () => { T.vistaHist = 'ultimos'; renderHistorial(CFG.tipeo); };
@@ -1347,6 +1353,21 @@ function enlazar() {
   });
 }
 
+/* ---- Computadora o celular: se detecta por mouse (puntero preciso con hover) ---- */
+let tecladoPantalla = false;   // en PC el teclado en pantalla empieza oculto
+try { tecladoPantalla = localStorage.getItem('mp_teclado') === '1'; } catch (e) { /* nada */ }
+const mqPC = window.matchMedia ? window.matchMedia('(hover: hover) and (pointer: fine)') : null;
+function aplicarModo() {
+  const pc = !!(mqPC && mqPC.matches);
+  document.body.classList.toggle('pc', pc);
+  const s = $('#s-tipeo');
+  s.classList.toggle('sin-teclado', pc && !tecladoPantalla);
+  const b = $('#t-tec');
+  b.title = b.ariaLabel = tecladoPantalla ? 'Ocultar teclado en pantalla' : 'Mostrar teclado en pantalla';
+  b.style.opacity = tecladoPantalla ? '1' : '.7';
+}
+if (mqPC && mqPC.addEventListener) mqPC.addEventListener('change', aplicarModo);
+
 (async function init() {
   try {
     const guardado = await DB.leer();
@@ -1359,6 +1380,7 @@ function enlazar() {
   try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) { /* nada */ }
   enlazar();
   enlazarTipeo();
+  aplicarModo();
   history.replaceState({ n: 'menu' }, '');
   mostrar('menu');
   refrescarMenu();
