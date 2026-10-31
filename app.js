@@ -823,13 +823,14 @@ const CFG = {
 /** Récord de la pregunta elegida: siempre visible arriba, junto al reloj. */
 function renderRecord(cfg, nuevo) {
   const S2 = cfg.S();
-  const t = S2.q ? (cfg.tiempos()[S2.q.id] || []) : [];
+  const todos = S2.q ? (cfg.tiempos()[S2.q.id] || []) : [];
+  const t = todos.filter(x => !x.h);   // con pistas no cuenta para el récord
   const caja = $('#' + cfg.p + '-rec');
   caja.className = 'rec';
   if (!t.length) {
     S2.rec = null;
     $('#' + cfg.p + '-rec-tiempo').textContent = '—';
-    $('#' + cfg.p + '-rec-fecha').textContent = S2.q ? 'Todavía sin récord' : '';
+    $('#' + cfg.p + '-rec-fecha').textContent = S2.q ? (todos.length ? 'Sin récord (solo con ayuda)' : 'Todavía sin récord') : '';
     return;
   }
   const mejor = t.reduce((m, x) => (x.ms < m.ms ? x : m), t[0]);
@@ -851,9 +852,10 @@ function renderHistorial(cfg) {
     cont.append(el('p', 'muted centro', S2.q ? 'Todavía no hay tiempos para esta pregunta.' : '—'));
     return;
   }
-  const rec = Math.min(...t.map(x => x.ms));
+  const validos = t.filter(x => !x.h);
+  const rec = validos.length ? Math.min(...validos.map(x => x.ms)) : -1;
   const filas = S2.vistaHist === 'mejores'
-    ? [...t].sort((a, b) => a.ms - b.ms).slice(0, 10).map((x, i) => ({ x, n: i + 1 }))
+    ? [...validos].sort((a, b) => a.ms - b.ms).slice(0, 10).map((x, i) => ({ x, n: i + 1 }))
     : t.map((x, i) => ({ x, n: i + 1 })).reverse().slice(0, 15);
 
   const tabla = el('table', 'tabla');
@@ -864,13 +866,13 @@ function renderHistorial(cfg) {
 
   const tbody = el('tbody');
   filas.forEach(({ x, n }) => {
-    const esRec = x.ms === rec;
+    const esRec = !x.h && x.ms === rec;
     const tr = el('tr', (esRec ? 'es-rec ' : '') + (x === S2.ultimoReg ? 'nuevo' : ''));
     tr.append(
       el('td', '', String(n)),
       el('td', 't', formatoTiempo(x.ms)),
       el('td', 'f', fechaHora(x.f)),
-      el('td', 'd', esRec ? '★ récord' : '+' + ((x.ms - rec) / 1000).toFixed(2) + ' s')
+      el('td', 'd', x.h ? `💡 ${x.h}` : esRec ? '★ récord' : '+' + ((x.ms - rec) / 1000).toFixed(2) + ' s')
     );
     tbody.append(tr);
   });
@@ -892,7 +894,7 @@ const TECLAS_FILAS = ['1234567890', 'qwertyuiop', 'asdfghjklñ', 'zxcvbnm'];
 const TECLAS_OK = TECLAS_FILAS.join('');
 
 const T = {
-  ruta: null, q: null, chars: [], pos: 0, total: 0, hechos: 0, errores: 0,
+  ruta: null, q: null, chars: [], pos: 0, total: 0, hechos: 0, errores: 0, pistas: 0, pistaPos: new Set(),
   estado: 'sinPregunta', // sinPregunta | listo | corriendo | fin | viendo
   t0: 0, raf: 0, bloqueo: 0, ultimoReg: null, wake: null,
   rec: null, pasado: false, vistaHist: 'ultimos', teclas: {}, tecladoListo: false
@@ -1019,6 +1021,7 @@ function cargarPreguntaTipeo(q) {
   T.pos = 0;
   T.hechos = 0;
   T.errores = 0;
+  T.pistas = 0; T.pistaPos = new Set();
   T.estado = 'listo';
   T.ultimoReg = null;
   T.pasado = false;
@@ -1055,6 +1058,7 @@ function botonesT() {
   $('#t-main').hidden = !fin;
   $('#t-teclado').className = 'teclado' + (T.estado === 'sinPregunta' ? ' apagado' : '');
   $('#t-ver').disabled = T.estado === 'sinPregunta';
+  $('#t-pista').disabled = T.estado === 'sinPregunta' || fin;
   $('#t-cancelar').disabled = T.estado !== 'corriendo';
   $('#t-cancelar').className = 'btn small' + (T.estado === 'corriendo' ? '' : ' oculto');
 }
@@ -1062,7 +1066,17 @@ function botonesT() {
 function renderTipeo() {
   const box = $('#t-respuesta');
   box.textContent = '';
-  box.append(document.createTextNode(T.chars.slice(0, T.pos).join('')));
+  let tramo = '', conPista = false;
+  const volcar = () => {
+    if (tramo) box.append(conPista ? el('span', 'pista', tramo) : document.createTextNode(tramo));
+    tramo = '';
+  };
+  for (let i = 0; i < T.pos; i++) {
+    const p = T.pistaPos.has(i);
+    if (p !== conPista) { volcar(); conPista = p; }
+    tramo += T.chars[i];
+  }
+  volcar();
   if (T.pos < T.chars.length) box.append(el('span', 'cursor'));
   ajustarScrollT();
   // Una vez que el navegador terminó de acomodar el nuevo tamaño, se vuelve a ajustar
@@ -1107,6 +1121,7 @@ function empezarTipeo() {
   T.pos = 0;
   T.hechos = 0;
   T.errores = 0;
+  T.pistas = 0; T.pistaPos = new Set();
   T.ultimoReg = null;
   T.pasado = false;
   avanzarAuto();
@@ -1156,14 +1171,34 @@ function tocarTecla(raw) {
   }
 }
 
+/** Pista: escribe sola la próxima letra (queda marcada y se anota en el intento). */
+function pistaT() {
+  if (T.estado === 'sinPregunta') { aviso('Elegí una pregunta de la lista.'); return; }
+  if (T.estado === 'fin' || !T.total) return;
+  audio();
+  if (T.estado === 'listo' || T.estado === 'viendo') empezarTipeo();
+  if (T.pos >= T.chars.length) return;
+  T.pistas++;
+  T.pistaPos.add(T.pos);
+  T.pos++;
+  T.hechos++;
+  avanzarAuto();
+  renderTipeo();
+  progresoT();
+  if (T.pos >= T.chars.length) terminarTipeo();
+}
+
 async function terminarTipeo() {
   const ms = Math.round(performance.now() - T.t0);
   detenerT();
   T.estado = 'fin';
   T.bloqueo = performance.now() + 900; // evita reiniciar por un toque de más
-  const prev = E.tiemposTipeo[T.q.id] ? [...E.tiemposTipeo[T.q.id]] : [];
-  const res = evaluar(prev, ms);
+  const prev = (E.tiemposTipeo[T.q.id] || []).filter(x => !x.h);   // los intentos con ayuda no cuentan para comparar
+  const res = T.pistas
+    ? { clase: 'ayuda', titulo: 'CON AYUDA', detalle: `Usaste ${T.pistas} pista${T.pistas === 1 ? '' : 's'}. Queda en el historial, pero no cuenta para el récord ni para tu nivel habitual.` }
+    : evaluar(prev, ms);
   const reg = { f: ahora(), ms, p: T.total, e: T.errores };
+  if (T.pistas) reg.h = T.pistas;
   (E.tiemposTipeo[T.q.id] = E.tiemposTipeo[T.q.id] || []).push(reg);
   T.ultimoReg = reg;
   setRelojT(ms, res.clase);
@@ -1228,6 +1263,7 @@ function enlazarTipeo() {
     if (!E.silencio) audio();
   };
   $('#t-ver').onclick = verRespuestaT;
+  $('#t-pista').onclick = pistaT;
   $('#t-tec').onclick = () => {
     tecladoPantalla = !tecladoPantalla;
     try { localStorage.setItem('mp_teclado', tecladoPantalla ? '1' : '0'); } catch (e) { /* nada */ }
@@ -1451,6 +1487,7 @@ function enlazar() {
       else if (e.key.toLowerCase() === 'n') { e.preventDefault(); $('#c-nueva').click(); }
     } else if (actual === 'tipeo') {
       if (e.key === 'Escape') pedirCancelarT();
+      else if (e.key === 'Enter' && !e.repeat && ['listo', 'corriendo', 'viendo'].includes(T.estado)) { e.preventDefault(); pistaT(); }
       else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); tocarTecla(e.key); }
     }
   });
@@ -1511,7 +1548,7 @@ async function sincronizar() {
     [['palabras', E.tiempos], ['tipeo', E.tiemposTipeo]].forEach(([tipo, mapa]) => {
       Object.entries(mapa || {}).forEach(([qid, lista]) => (lista || []).forEach(x => {
         const id = claveTiempo(qid, tipo, x);
-        if (!N.enviados[id]) subirT.push({ id, f: x.f, tipo, qid, ms: x.ms, p: x.p, e: x.e });
+        if (!N.enviados[id]) subirT.push({ id, f: x.f, tipo, qid, ms: x.ms, p: x.p, e: x.e, h: x.h });
       }));
     });
 
@@ -1588,6 +1625,7 @@ async function sincronizar() {
       const reg = { f: t.f, ms };
       if (t.p !== '' && t.p != null) reg.p = Number(t.p);
       if (t.e !== '' && t.e != null) reg.e = Number(t.e);
+      if (t.h !== '' && t.h != null && Number(t.h) > 0) reg.h = Number(t.h);
       lista.push(reg);
       bajados++;
     });

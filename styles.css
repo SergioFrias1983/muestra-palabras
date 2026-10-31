@@ -196,3 +196,8 @@ body.pc #s-tipeo.sin-teclado .acciones{padding-top:8px}
   .fila-rec{margin-bottom:5px}
 }
 .btn.mas.gest{font-size:1.3rem;letter-spacing:.05em}
+
+/* Pistas: la letra adelantada se ve distinta, y el intento queda marcado "con ayuda" */
+.respuesta .pista{color:var(--nar);text-decoration:underline dotted;text-underline-offset:3px}
+.resultado.ayuda{border-left-color:var(--nar)} .resultado.ayuda b{color:var(--nar)}
+.reloj.ayuda{color:var(--nar)}
