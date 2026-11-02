@@ -749,7 +749,7 @@ async function terminar() {
   r.hidden = false;
   renderScores(CFG.palabras, res.clase === 'record');
   botones();
-  r.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  verResultado('#e-resultado', '#s-eval .marcador');
   await guardarEstado();
 }
 
@@ -1098,13 +1098,14 @@ function siguienteT() {
   window.scrollTo(0, 0);
 }
 
-/** Al terminar: lleva la vista a la pregunta, de modo que se vean la respuesta, el resultado y el historial. */
-function verResultadoT() {
-  const p = $('#t-pregunta'), m = document.querySelector('#s-tipeo .marcador');
-  if (!p.getBoundingClientRect) return;
-  const y = p.getBoundingClientRect().top + window.scrollY - (m ? m.getBoundingClientRect().height : 0) - 10;
+/** Al terminar: lleva la vista al resultado (récord, bueno o malo), justo debajo del reloj. */
+function verResultado(selResultado, selMarcador) {
+  const r = $(selResultado), m = document.querySelector(selMarcador);
+  if (!r.getBoundingClientRect) return;
+  const y = r.getBoundingClientRect().top + window.scrollY - (m ? m.getBoundingClientRect().height : 0) - 10;
   window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
 }
+const verResultadoT = () => verResultado('#t-resultado', '#s-tipeo .marcador');
 
 function renderTipeo() {
   const box = $('#t-respuesta');
