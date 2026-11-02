@@ -583,7 +583,7 @@ const V = {
 function iniciarEval(ruta) {
   V.ruta = ruta;
   entrar('eval');
-  $('#e-ruta').textContent = ruta.join(' › ');
+  pintarRuta('#e-ruta', ruta);
   V.q = null;
   V.estado = 'sinPregunta';
   renderListaEval();
@@ -971,11 +971,21 @@ function construirTeclado() {
   T.tecladoListo = true;
 }
 
+/** Ubicación en la barra de arriba: en pantallas chicas solo se ve la última carpeta (la actividad). */
+function pintarRuta(sel, ruta) {
+  const c = $(sel);
+  c.textContent = '';
+  ruta.forEach((x, i) => {
+    if (i) c.append(el('span', 'sep', ' › '));
+    c.append(el('span', 'tr tr' + i, x));
+  });
+}
+
 /* ----- Pantalla ----- */
 function iniciarTipeo(ruta) {
   T.ruta = ruta;
   entrar('tipeo');
-  $('#t-ruta').textContent = ruta.join(' › ');
+  pintarRuta('#t-ruta', ruta);
   construirTeclado();
   actualizarSonido();
   detenerT();
@@ -1061,6 +1071,39 @@ function botonesT() {
   $('#t-pista').disabled = T.estado === 'sinPregunta' || fin;
   $('#t-cancelar').disabled = T.estado !== 'corriendo';
   $('#t-cancelar').className = 'btn small' + (T.estado === 'corriendo' ? '' : ' oculto');
+  // Mientras corre el reloj se esconde el historial; al terminar se esconden las ayudas y aparece "Siguiente"
+  $('#s-tipeo').classList.toggle('en-curso', T.estado === 'corriendo');
+  $('#s-tipeo').classList.toggle('terminado', fin);
+  $('#t-row-ayuda').hidden = fin;
+  const sig = fin ? siguienteDeT() : null;
+  $('#t-fin-row').hidden = !sig;
+  if (sig) $('#t-sig').textContent = sig.vuelta ? 'Volver a la primera ↺' : 'Siguiente pregunta ›';
+  $('#t-ayuda').textContent = fin
+    ? 'Enter = reintentar' + (sig ? ' · → siguiente pregunta' : '')
+    : 'Escribí con tu teclado · Enter = pista · Esc cancela el intento';
+}
+
+/** La pregunta que sigue en la misma actividad (si es la última, vuelve a la primera). */
+function siguienteDeT() {
+  const l = T.ruta && T.q ? pregs(T.ruta) : [];
+  if (l.length < 2) return null;
+  const i = l.findIndex(q => q.id === T.q.id);
+  return { q: l[(i + 1) % l.length], vuelta: i + 1 >= l.length };
+}
+function siguienteT() {
+  if (T.estado === 'corriendo') return;
+  const s2 = siguienteDeT();
+  if (!s2) return;
+  cargarPreguntaTipeo(s2.q);
+  window.scrollTo(0, 0);
+}
+
+/** Al terminar: lleva la vista a la pregunta, de modo que se vean la respuesta, el resultado y el historial. */
+function verResultadoT() {
+  const p = $('#t-pregunta'), m = document.querySelector('#s-tipeo .marcador');
+  if (!p.getBoundingClientRect) return;
+  const y = p.getBoundingClientRect().top + window.scrollY - (m ? m.getBoundingClientRect().height : 0) - 10;
+  window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
 }
 
 function renderTipeo() {
@@ -1210,7 +1253,7 @@ async function terminarTipeo() {
   r.hidden = false;
   renderScores(CFG.tipeo, res.clase === 'record');
   botonesT();
-  r.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  verResultadoT();
   await guardarEstado();
 }
 
@@ -1224,6 +1267,7 @@ async function pedirCancelarT() {
 function reintentarT() {
   if (T.estado !== 'fin' || performance.now() < T.bloqueo) return;
   cargarPreguntaTipeo(T.q);
+  window.scrollTo(0, 0);
 }
 
 function cancelarTipeo() {
@@ -1272,6 +1316,7 @@ function enlazarTipeo() {
   };
   $('#t-cancelar').onclick = pedirCancelarT;
   $('#t-main').onclick = reintentarT;
+  $('#t-sig').onclick = siguienteT;
   $('#t-h-ultimos').onclick = () => { T.vistaHist = 'ultimos'; renderHistorial(CFG.tipeo); };
   $('#t-h-mejores').onclick = () => { T.vistaHist = 'mejores'; renderHistorial(CFG.tipeo); };
 }
@@ -1487,6 +1532,8 @@ function enlazar() {
       else if (e.key.toLowerCase() === 'n') { e.preventDefault(); $('#c-nueva').click(); }
     } else if (actual === 'tipeo') {
       if (e.key === 'Escape') pedirCancelarT();
+      else if (e.key === 'Enter' && !e.repeat && T.estado === 'fin') { e.preventDefault(); reintentarT(); }
+      else if (e.key === 'ArrowRight' && !e.repeat && T.estado === 'fin') { e.preventDefault(); siguienteT(); }
       else if (e.key === 'Enter' && !e.repeat && ['listo', 'corriendo', 'viendo'].includes(T.estado)) { e.preventDefault(); pistaT(); }
       else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); tocarTecla(e.key); }
     }
