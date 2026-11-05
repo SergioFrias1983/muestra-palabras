@@ -7,7 +7,7 @@
 
 /* ---------------- Versión ----------------
    Al cambiar algo: subir el número (igual que CACHE en sw.js) y describir el cambio. */
-const VERSION = { num: 19, fecha: '05/11/26', cambio: 'Etiqueta de versión en el menú' };
+const VERSION = { num: 20, fecha: '05/11/26', cambio: 'Se actualiza sola al abrir' };
 
 /* ---------------- Utilidades ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -1949,5 +1949,16 @@ if (mqPC && mqPC.addEventListener) mqPC.addEventListener('change', aplicarModo);
   history.replaceState({ n: 'menu' }, '');
   mostrar('menu');
   refrescarMenu();
-  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+  if ('serviceWorker' in navigator) {
+    // Cuando se instala una versión nueva, recargar una vez para mostrarla enseguida.
+    const habia = !!navigator.serviceWorker.controller;
+    let recargando = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (!habia || recargando) return;
+      recargando = true;
+      location.reload();
+    });
+    navigator.serviceWorker.register('sw.js', { updateViaCache: 'none' })
+      .then(reg => reg.update()).catch(() => {});
+  }
 })();
