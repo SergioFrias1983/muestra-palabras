@@ -6,8 +6,10 @@
    ===================================================================== */
 
 /* ---------------- Versión ----------------
-   Al cambiar algo: subir el número (igual que CACHE en sw.js) y describir el cambio. */
-const VERSION = { num: 20, fecha: '05/11/26', cambio: 'Se actualiza sola al abrir' };
+   En cada cambio: actualizar num (y el mismo valor en CACHE de sw.js), fecha y cambio.
+   Numeración: el primer cambio de un día sube el entero (21, 22…);
+   los siguientes del mismo día agregan subversión (20.1, 20.2…). */
+const VERSION = { num: '20.1', fecha: '05/11/26', cambio: 'Numeración con subversiones' };
 
 /* ---------------- Utilidades ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
