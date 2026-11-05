@@ -9,7 +9,7 @@
    En cada cambio: actualizar num (y el mismo valor en CACHE de sw.js), fecha y cambio.
    Numeración: el primer cambio de un día sube el entero (21, 22…);
    los siguientes del mismo día agregan subversión (20.1, 20.2…). */
-const VERSION = { num: '20.1', fecha: '05/11/26', cambio: 'Numeración con subversiones' };
+const VERSION = { num: '20.2', fecha: '05/11/26', cambio: '' };
 
 /* ---------------- Utilidades ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -1932,7 +1932,7 @@ function aplicarModo() {
 if (mqPC && mqPC.addEventListener) mqPC.addEventListener('change', aplicarModo);
 
 (async function init() {
-  $('#m-version').textContent = `Versión ${VERSION.num} · ${VERSION.fecha} · ${VERSION.cambio}`;
+  $('#m-version').textContent = `Versión ${VERSION.num} · ${VERSION.fecha}` + (VERSION.cambio ? ` · ${VERSION.cambio}` : '');
   try {
     const guardado = await DB.leer();
     if (guardado) E = Object.assign(E, guardado);
