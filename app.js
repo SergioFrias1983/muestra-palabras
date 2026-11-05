@@ -126,7 +126,7 @@ const mismaRuta = (a, b) => a.length === b.length && a.every((x, i) => x === b[i
 const pregs = ruta => E.preguntas.filter(q => mismaRuta(q.ruta, ruta)).sort((a, b) => a.num - b.num);
 
 /* ---------------- Modales ---------------- */
-function modal({ titulo = '', mensaje = '', input = null, botones }) {
+function modal({ titulo = '', mensaje = '', input = null, botones, apilados = false }) {
   return new Promise(resolve => {
     const m = $('#modal'), inp = $('#modal-input'), bs = $('#modal-botones');
     $('#modal-titulo').textContent = titulo;
@@ -135,6 +135,7 @@ function modal({ titulo = '', mensaje = '', input = null, botones }) {
     inp.hidden = input === null;
     inp.value = input || '';
     bs.innerHTML = '';
+    bs.className = 'botones' + (apilados ? ' apilados' : '');
 
     const cerrar = v => {
       m.hidden = true;
@@ -1534,7 +1535,10 @@ function proximaRonda(S2) {
 }
 async function finRonda(act) {
   const S2 = CFG[act].S();
-  const orden = listaRonda(S2).filter(q => S2.ronda.dudosas.has(q.id)).map(q => q.id);
+  // Se repiten todas las de la ronda que siguen en «Para repasar» (dudosas o con pistas,
+  // de esta ronda o de antes), no solo las marcadas como dudosas en esta ronda.
+  const pend = new Set(itemsRepaso().map(x => x.q.id));
+  const orden = listaRonda(S2).filter(q => pend.has(q.id) || S2.ronda.dudosas.has(q.id)).map(q => q.id);
   const alcanceActual = S2.ronda.alcance;
   if (!orden.length) {
     S2.ronda = nuevaRonda(alcanceActual);
@@ -1543,9 +1547,10 @@ async function finRonda(act) {
     return;
   }
   const n = orden.length;
+  const uno = n === 1;
   const repetir = await confirmar('Ronda completa',
-    `Quedaron ${n} pregunta${n === 1 ? '' : 's'} dudosa${n === 1 ? '' : 's'}. ¿Las repetís ahora?`,
-    'Repetir dudosas', 'primary', 'Terminar');
+    `${uno ? 'Queda 1 pregunta' : `Quedan ${n} preguntas`} para repasar. ¿${uno ? 'La repetís' : 'Las repetís'} ahora?`,
+    uno ? 'Repetirla' : `Repetir las ${n}`, 'primary', 'Terminar');
   if (repetir) {
     S2.ronda = nuevaRonda(orden);
     const q = listaRonda(S2)[0];
@@ -1615,11 +1620,12 @@ function renderRepaso() {
     b.onclick = async () => {
       const v = await modal({
         titulo: `Pregunta ${pad(q.num, 3)}`, mensaje: resumen(q),
+        apilados: true,
         botones: [
-          { texto: 'Cancelar', valor: null, cancel: true },
-          { texto: 'Quitar de la lista', valor: 'quitar', clase: 'danger' },
           { texto: '⏱️ Practicar revelando', valor: 'palabras', clase: 'primary' },
-          { texto: '⌨️ Practicar escribiendo', valor: 'tipeo', clase: 'primary' }
+          { texto: '⌨️ Practicar escribiendo', valor: 'tipeo', clase: 'primary' },
+          { texto: 'Quitar de la lista', valor: 'quitar', clase: 'danger sep' },
+          { texto: 'Cancelar', valor: null, cancel: true }
         ]
       });
       if (v === 'quitar') { quitarRepaso(q.id); await guardarEstado(); renderRepaso(); }
