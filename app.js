@@ -5,6 +5,10 @@
    Datos guardados en IndexedDB del navegador. Sin servidor.
    ===================================================================== */
 
+/* ---------------- Versión ----------------
+   Al cambiar algo: subir el número (igual que CACHE en sw.js) y describir el cambio. */
+const VERSION = { num: 19, fecha: '05/11/26', cambio: 'Etiqueta de versión en el menú' };
+
 /* ---------------- Utilidades ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
 const pad = (n, l = 2) => String(n).padStart(l, '0');
@@ -1926,6 +1930,7 @@ function aplicarModo() {
 if (mqPC && mqPC.addEventListener) mqPC.addEventListener('change', aplicarModo);
 
 (async function init() {
+  $('#m-version').textContent = `Versión ${VERSION.num} · ${VERSION.fecha} · ${VERSION.cambio}`;
   try {
     const guardado = await DB.leer();
     if (guardado) E = Object.assign(E, guardado);

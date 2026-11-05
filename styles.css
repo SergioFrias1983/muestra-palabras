@@ -236,3 +236,6 @@ body.pc #s-tipeo.sin-teclado .acciones{padding-top:8px}
 @media (min-width:700px){
   #s-tipeo.terminado .acciones .row.calif{grid-column:1/-1}
 }
+
+/* ===== Versión (pie del menú) ===== */
+.version{color:var(--muted);opacity:.7;font-size:.8rem;text-align:center;margin:28px 0 4px}
