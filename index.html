@@ -21,6 +21,7 @@
   <p class="muted">Estudiá definiciones contra el reloj, revelándolas palabra por palabra o escribiéndolas letra por letra.</p>
   <button class="btn big" id="m-crear">Crear preguntas</button>
   <button class="btn big primary" id="m-evaluar">Evaluar lo aprendido</button>
+  <button class="btn big" id="m-repaso">Para repasar</button>
   <button class="btn big" id="m-datos">Copia de seguridad e importar</button>
   <button class="btn big" id="m-sync" hidden>☁️ Sincronizar con Google Sheet</button>
   <p id="m-sync-info" class="muted centro"></p>
@@ -126,6 +127,10 @@
   </section>
 
   <div class="acciones">
+    <div class="row calif" id="e-calif" hidden>
+      <button class="btn huge success" id="e-apr">✓ Aprendida</button>
+      <button class="btn huge dudosa" id="e-dud">? Dudosa</button>
+    </div>
     <button class="btn primary huge" id="e-main">ELEGÍ UNA PREGUNTA</button>
     <div class="row">
       <button class="btn grow" id="e-ver">Ver respuesta</button>
@@ -182,6 +187,10 @@
   <div class="acciones">
     <p class="ayuda-pc solo-pc" id="t-ayuda">Escribí con tu teclado · Enter = pista · Esc cancela el intento</p>
     <div id="t-teclado" class="teclado apagado"></div>
+    <div class="row calif" id="t-calif" hidden>
+      <button class="btn huge success" id="t-apr">✓ Aprendida</button>
+      <button class="btn huge dudosa" id="t-dud">? Dudosa</button>
+    </div>
     <button class="btn primary huge" id="t-main" hidden>REINTENTAR</button>
     <div class="row" id="t-fin-row" hidden>
       <button class="btn grow" id="t-sig">Siguiente pregunta ›</button>
@@ -191,6 +200,20 @@
       <button class="btn grow" id="t-ver">Ver respuesta</button>
     </div>
   </div>
+</section>
+
+<!-- ============ PARA REPASAR ============ -->
+<section id="s-repaso" class="screen" hidden>
+  <header class="bar">
+    <button class="btn small" id="r-volver">‹ Menú</button>
+    <h2>Para repasar</h2>
+  </header>
+  <p class="muted">Acá quedan las preguntas que marcaste como <b>Dudosa</b> o que respondiste con <b>pistas</b>. Salen de la lista cuando las marcás como <b>Aprendida</b>.</p>
+  <div id="r-botones" class="row">
+    <button class="btn grow" id="r-pal">⏱️ Repasar revelando</button>
+    <button class="btn grow" id="r-tip">⌨️ Repasar escribiendo</button>
+  </div>
+  <div id="r-lista" class="lista"></div>
 </section>
 
 <!-- ============ DATOS ============ -->

@@ -220,3 +220,16 @@ body.pc #s-tipeo.sin-teclado .acciones{padding-top:8px}
   #s-tipeo.terminado .acciones .btn.huge{margin:0}
 }
 @media (max-height:760px){ .respuesta{min-height:96px} }   /* ventanas bajas: más lugar para resultado e historial */
+
+/* ===== Aprendida / Dudosa ===== */
+.btn.dudosa{background:var(--nar);border-color:var(--nar);color:#2a1a08}
+.btn.block{display:block;width:100%}
+.acciones .row.calif{margin:0 0 8px}
+.row.calif .btn.huge{flex:1;width:auto;min-height:60px;font-size:1.2rem}
+.item .tag{float:right;margin-left:8px;font-size:.8rem;color:var(--nar)}
+.item .sub{display:block;font-size:.8rem;color:var(--muted);margin-top:2px}
+#r-lista{max-height:none}
+#r-lista:empty::before{content:"No hay nada para repasar. ¡Todo aprendido!"}
+@media (min-width:700px){
+  #s-tipeo.terminado .acciones .row.calif{grid-column:1/-1}
+}

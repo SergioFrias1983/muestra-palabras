@@ -90,7 +90,7 @@ const DB = {
    preguntas: [{ id, ruta:[a,b,c,d], num, pregunta, respuesta, archivo? }]
    tiempos:   { idPregunta: [{ f:'YYYY-MM-DD HH:MM:SS', ms, p }] }
    ultima:    última ubicación elegida */
-let E = { v: 1, arbol: {}, preguntas: [], tiempos: {}, tiemposTipeo: {}, ultima: [], silencio: false, nube: null };
+let E = { v: 1, arbol: {}, preguntas: [], tiempos: {}, tiemposTipeo: {}, ultima: [], silencio: false, nube: null, repaso: {} };
 const NUBE_BASE = () => ({ url: '', clave: '', disp: '', vistos: [], borrados: [], enviados: {}, ultimaSync: 0, ultima: '' });
 let almacenamientoOk = true;
 
@@ -348,7 +348,7 @@ function crearSelector(cont, alCambiar, gestion = false) {
 }
 
 /* ---------------- Navegación ---------------- */
-const PANTALLAS = ['menu', 'act', 'crear', 'sel', 'eval', 'tipeo', 'datos'];
+const PANTALLAS = ['menu', 'act', 'crear', 'sel', 'eval', 'tipeo', 'datos', 'repaso'];
 let actual = 'menu';
 
 function mostrar(n) {
@@ -394,6 +394,8 @@ window.addEventListener('popstate', async () => {
 
 function refrescarMenu() {
   refrescarNube();
+  const nRep = itemsRepaso().length;
+  $('#m-repaso').textContent = nRep ? `Para repasar (${nRep})` : 'Para repasar';
   const nAct = new Set(E.preguntas.map(q => q.ruta.join('/'))).size;
   $('#m-resumen').textContent = E.preguntas.length
     ? `${E.preguntas.length} pregunta${E.preguntas.length === 1 ? '' : 's'} en ${nAct} actividad${nAct === 1 ? '' : 'es'}`
@@ -580,10 +582,11 @@ const V = {
   vistaHist: 'ultimos'  // 'ultimos' | 'mejores'
 };
 
-function iniciarEval(ruta) {
+function iniciarEval(ruta, alcance) {
   V.ruta = ruta;
+  V.ronda = nuevaRonda(alcance);
   entrar('eval');
-  pintarRuta('#e-ruta', ruta);
+  pintarRutaRonda('#e-ruta', ruta, alcance);
   V.q = null;
   V.estado = 'sinPregunta';
   renderListaEval();
@@ -595,11 +598,12 @@ function iniciarEval(ruta) {
   renderScores(CFG.palabras);
   progreso();
   botones();
+  if (alcance) { const l = listaRonda(V); if (l.length) { cargarPreguntaEval(l[0]); $('#e-preguntas').open = false; } }
 }
 
 function renderListaEval() {
-  const lista = pregs(V.ruta);
-  $('#e-preguntas-titulo').textContent = `Preguntas (${lista.length}) — tocá una para elegirla`;
+  const lista = listaRonda(V);
+  $('#e-preguntas-titulo').textContent = `Preguntas (${lista.length}) — tocá una para elegirla` + textoRonda(V);
   const cont = $('#e-lista');
   cont.innerHTML = '';
   lista.forEach(q => {
@@ -620,6 +624,7 @@ function renderListaEval() {
 
 function cargarPreguntaEval(q) {
   detener();
+  if (!V.ronda) V.ronda = nuevaRonda();
   V.q = q;
   V.tokens = tokenizar(q.respuesta);
   V.idxPal = [];
@@ -627,6 +632,7 @@ function cargarPreguntaEval(q) {
   V.n = V.idxPal.length;
   V.k = 0;
   V.estado = 'listo';
+  V.calificada = false;
   V.ultimoReg = null;
   $('#e-pregunta').textContent = q.pregunta;
   setReloj(0);
@@ -660,6 +666,9 @@ function botones() {
     corriendo: 'SIGUIENTE PALABRA', fin: 'REINTENTAR'
   };
   main.textContent = etiquetas[V.estado];
+  const pideCalif = V.estado === 'fin' && !V.calificada;
+  $('#e-calif').hidden = !pideCalif;
+  main.className = V.estado === 'fin' ? 'btn block' : 'btn primary huge';
   $('#e-ver').disabled = V.estado === 'sinPregunta';
   $('#e-cancelar').disabled = V.estado !== 'corriendo';
   $('#e-cancelar').className = 'btn small' + (V.estado === 'corriendo' ? '' : ' oculto');
@@ -735,6 +744,7 @@ async function terminar() {
   const ms = Math.round(performance.now() - V.t0);
   detener();
   V.estado = 'fin';
+  V.calificada = false;
   V.bloqueo = performance.now() + 900; // evita reiniciar por un toque de más
   const prev = E.tiempos[V.q.id] ? [...E.tiempos[V.q.id]] : [];
   const res = evaluar(prev, ms);
@@ -982,10 +992,11 @@ function pintarRuta(sel, ruta) {
 }
 
 /* ----- Pantalla ----- */
-function iniciarTipeo(ruta) {
+function iniciarTipeo(ruta, alcance) {
   T.ruta = ruta;
+  T.ronda = nuevaRonda(alcance);
   entrar('tipeo');
-  pintarRuta('#t-ruta', ruta);
+  pintarRutaRonda('#t-ruta', ruta, alcance);
   construirTeclado();
   actualizarSonido();
   detenerT();
@@ -1001,11 +1012,12 @@ function iniciarTipeo(ruta) {
   renderScores(CFG.tipeo);
   progresoT();
   botonesT();
+  if (alcance) { const l = listaRonda(T); if (l.length) { cargarPreguntaTipeo(l[0]); $('#t-preguntas').open = false; } }
 }
 
 function renderListaTipeo() {
-  const lista = pregs(T.ruta);
-  $('#t-preguntas-titulo').textContent = `Preguntas (${lista.length}) — tocá una para elegirla`;
+  const lista = listaRonda(T);
+  $('#t-preguntas-titulo').textContent = `Preguntas (${lista.length}) — tocá una para elegirla` + textoRonda(T);
   const cont = $('#t-lista');
   cont.innerHTML = '';
   lista.forEach(q => {
@@ -1025,6 +1037,7 @@ function renderListaTipeo() {
 
 function cargarPreguntaTipeo(q) {
   detenerT();
+  if (!T.ronda) T.ronda = nuevaRonda();
   T.q = q;
   T.chars = Array.from(q.respuesta.normalize('NFC'));
   T.total = T.chars.filter(esTipeable).length;
@@ -1033,6 +1046,7 @@ function cargarPreguntaTipeo(q) {
   T.errores = 0;
   T.pistas = 0; T.pistaPos = new Set();
   T.estado = 'listo';
+  T.calificada = false;
   T.ultimoReg = null;
   T.pasado = false;
   $('#t-pregunta').textContent = q.pregunta;
@@ -1066,6 +1080,10 @@ function botonesT() {
   const fin = T.estado === 'fin';
   $('#t-teclado').hidden = fin;
   $('#t-main').hidden = !fin;
+  $('#t-main').className = 'btn block';
+  $('#t-calif').hidden = !(fin && !T.calificada);
+  $('#t-apr').hidden = !!T.pistas;
+  $('#t-dud').textContent = T.pistas ? 'Continuar ›' : '? Dudosa';
   $('#t-teclado').className = 'teclado' + (T.estado === 'sinPregunta' ? ' apagado' : '');
   $('#t-ver').disabled = T.estado === 'sinPregunta';
   $('#t-pista').disabled = T.estado === 'sinPregunta' || fin;
@@ -1077,25 +1095,23 @@ function botonesT() {
   $('#t-row-ayuda').hidden = fin;
   const sig = fin ? siguienteDeT() : null;
   $('#t-fin-row').hidden = !sig;
-  if (sig) $('#t-sig').textContent = sig.vuelta ? 'Volver a la primera ↺' : 'Siguiente pregunta ›';
+  if (sig) $('#t-sig').textContent = 'Saltar sin calificar ›';
   $('#t-ayuda').textContent = fin
-    ? 'Enter = reintentar' + (sig ? ' · → siguiente pregunta' : '')
+    ? (T.pistas ? 'D = continuar' : 'A = aprendida · D = dudosa') + ' · R = reintentar' + (sig ? ' · → saltar' : '')
     : 'Escribí con tu teclado · Enter = pista · Esc cancela el intento';
 }
 
 /** La pregunta que sigue en la misma actividad (si es la última, vuelve a la primera). */
 function siguienteDeT() {
-  const l = T.ruta && T.q ? pregs(T.ruta) : [];
+  if (!T.q) return null;
+  const l = listaRonda(T);
   if (l.length < 2) return null;
   const i = l.findIndex(q => q.id === T.q.id);
   return { q: l[(i + 1) % l.length], vuelta: i + 1 >= l.length };
 }
 function siguienteT() {
-  if (T.estado === 'corriendo') return;
-  const s2 = siguienteDeT();
-  if (!s2) return;
-  cargarPreguntaTipeo(s2.q);
-  window.scrollTo(0, 0);
+  if (T.estado !== 'fin' || T.calificada) return;
+  saltar('tipeo');
 }
 
 /** Al terminar: lleva la vista al resultado (récord, bueno o malo), justo debajo del reloj. */
@@ -1236,6 +1252,7 @@ async function terminarTipeo() {
   const ms = Math.round(performance.now() - T.t0);
   detenerT();
   T.estado = 'fin';
+  T.calificada = false;
   T.bloqueo = performance.now() + 900; // evita reiniciar por un toque de más
   const prev = (E.tiemposTipeo[T.q.id] || []).filter(x => !x.h);   // los intentos con ayuda no cuentan para comparar
   const res = T.pistas
@@ -1244,13 +1261,14 @@ async function terminarTipeo() {
   const reg = { f: ahora(), ms, p: T.total, e: T.errores };
   if (T.pistas) reg.h = T.pistas;
   (E.tiemposTipeo[T.q.id] = E.tiemposTipeo[T.q.id] || []).push(reg);
+  if (T.pistas) { marcarRepaso(T.q.id, 'tipeo', 'pistas'); T.ronda.dudosas.add(T.q.id); }
   T.ultimoReg = reg;
   setRelojT(ms, res.clase);
   const r = $('#t-resultado');
   r.className = 'resultado ' + res.clase;
   r.textContent = '';
   const err = T.errores ? ` Errores: ${T.errores}.` : ' ¡Sin errores!';
-  r.append(el('b', '', res.titulo), document.createTextNode(res.detalle + err));
+  r.append(el('b', '', res.titulo), document.createTextNode(res.detalle + err + (T.pistas ? ' Se agregó a «Para repasar».' : '')));
   r.hidden = false;
   renderScores(CFG.tipeo, res.clase === 'record');
   botonesT();
@@ -1364,7 +1382,7 @@ function descargar(blob, nombre) {
 }
 
 function exportarCopia() {
-  const datos = { app: 'muestra-palabras', v: 1, exportado: ahora(), arbol: E.arbol, preguntas: E.preguntas, tiempos: E.tiempos, tiemposTipeo: E.tiemposTipeo };
+  const datos = { app: 'muestra-palabras', v: 1, exportado: ahora(), arbol: E.arbol, preguntas: E.preguntas, tiempos: E.tiempos, tiemposTipeo: E.tiemposTipeo, repaso: E.repaso };
   const d = new Date();
   const nombre = `MuestraPalabras-copia-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}.json`;
   descargar(new Blob([JSON.stringify(datos, null, 1)], { type: 'application/json' }), nombre);
@@ -1395,6 +1413,8 @@ async function restaurarCopia(file) {
     };
     fusionar(E.tiempos, datos.tiempos);
     fusionar(E.tiemposTipeo, datos.tiemposTipeo);
+    E.repaso = E.repaso || {};
+    Object.entries(datos.repaso || {}).forEach(([id, r]) => { if (r && (!E.repaso[id] || (r.mod || 0) > (E.repaso[id].mod || 0))) E.repaso[id] = r; });
     await guardarEstado();
     D.sel.refrescar(E.ultima);
     est.textContent = `Restauradas ${nuevas.length} preguntas y ${tiemposAgregados} tiempos.`;
@@ -1470,6 +1490,151 @@ async function importarTxt(files) {
   if (sinPareja.length) est.textContent += ` (${sinPareja.length} archivo${sinPareja.length === 1 ? '' : 's'} de tiempos sin su pregunta, no se importaron).`;
 }
 
+
+/* =====================================================================
+   RONDAS Y "PARA REPASAR"
+   - Al terminar cada pregunta se elige Aprendida o Dudosa y se pasa a la siguiente.
+   - Las Dudosas (y las hechas con pistas) quedan en E.repaso y se repiten al final de la ronda.
+   ===================================================================== */
+const nuevaRonda = alcance => ({ alcance: alcance || null, hechas: new Set(), dudosas: new Set() });
+const CARGAR = { palabras: q => { cargarPreguntaEval(q); $('#e-preguntas').open = false; }, tipeo: q => { cargarPreguntaTipeo(q); $('#t-preguntas').open = false; } };
+
+function listaRonda(S2) {
+  if (S2.ronda && S2.ronda.alcance) return S2.ronda.alcance.map(id => E.preguntas.find(q => q.id === id)).filter(Boolean);
+  return S2.ruta ? pregs(S2.ruta) : [];
+}
+function textoRonda(S2) {
+  const r = S2.ronda;
+  if (!r || !r.hechas.size) return '';
+  return ` · Ronda: ${r.hechas.size} hecha${r.hechas.size === 1 ? '' : 's'}` + (r.dudosas.size ? `, ${r.dudosas.size} dudosa${r.dudosas.size === 1 ? '' : 's'}` : '');
+}
+function pintarRutaRonda(sel, ruta, alcance) {
+  if (!alcance) return pintarRuta(sel, ruta);
+  const c = $(sel);
+  c.textContent = '';
+  c.append(el('span', 'tr tr3', 'Para repasar'));
+}
+function marcarRepaso(qid, tipo, motivo) {
+  E.repaso = E.repaso || {};
+  E.repaso[qid] = { tipo, motivo, f: ahora(), mod: Date.now() };
+}
+/** Quita de la lista dejando una marca (así la baja también llega a los otros dispositivos). */
+function quitarRepaso(qid) {
+  const r = (E.repaso || {})[qid];
+  if (r) E.repaso[qid] = Object.assign({}, r, { q: true, mod: Date.now() });
+}
+function proximaRonda(S2) {
+  const l = listaRonda(S2);
+  const i = l.findIndex(q => q.id === S2.q.id);
+  for (let k = 1; k <= l.length; k++) {
+    const q = l[(i + k) % l.length];
+    if (!S2.ronda.hechas.has(q.id)) return q;
+  }
+  return null;
+}
+async function finRonda(act) {
+  const S2 = CFG[act].S();
+  const orden = listaRonda(S2).filter(q => S2.ronda.dudosas.has(q.id)).map(q => q.id);
+  const alcanceActual = S2.ronda.alcance;
+  if (!orden.length) {
+    S2.ronda = nuevaRonda(alcanceActual);
+    aviso('¡Ronda completa! Todo aprendido 🎉');
+    if (act === 'palabras') { renderListaEval(); botones(); } else { renderListaTipeo(); botonesT(); }
+    return;
+  }
+  const n = orden.length;
+  const repetir = await confirmar('Ronda completa',
+    `Quedaron ${n} pregunta${n === 1 ? '' : 's'} dudosa${n === 1 ? '' : 's'}. ¿Las repetís ahora?`,
+    'Repetir dudosas', 'primary', 'Terminar');
+  if (repetir) {
+    S2.ronda = nuevaRonda(orden);
+    const q = listaRonda(S2)[0];
+    CARGAR[act](q);
+    window.scrollTo(0, 0);
+  } else {
+    S2.ronda = nuevaRonda(alcanceActual);
+    aviso('Quedaron guardadas en «Para repasar».');
+    if (act === 'palabras') { renderListaEval(); botones(); } else { renderListaTipeo(); botonesT(); }
+  }
+}
+async function avanzarRonda(act) {
+  const S2 = CFG[act].S();
+  const nxt = proximaRonda(S2);
+  if (nxt) { CARGAR[act](nxt); window.scrollTo(0, 0); }
+  else await finRonda(act);
+}
+async function calificar(act, valor) {
+  const S2 = CFG[act].S();
+  if (S2.estado !== 'fin' || S2.calificada || !S2.q || performance.now() < S2.bloqueo) return;
+  if (act === 'tipeo' && S2.pistas) valor = 'dud';
+  S2.calificada = true;
+  const id = S2.q.id;
+  S2.ronda.hechas.add(id);
+  if (valor === 'apr') {
+    quitarRepaso(id);
+    S2.ronda.dudosas.delete(id);
+  } else {
+    marcarRepaso(id, act, act === 'tipeo' && S2.pistas ? 'pistas' : 'dudosa');
+    S2.ronda.dudosas.add(id);
+  }
+  await guardarEstado();
+  await avanzarRonda(act);
+}
+async function saltar(act) {
+  const S2 = CFG[act].S();
+  if (S2.estado !== 'fin' || S2.calificada || !S2.q) return;
+  S2.calificada = true;
+  S2.ronda.hechas.add(S2.q.id);
+  await avanzarRonda(act);
+}
+
+/* ----- Pantalla "Para repasar" ----- */
+function itemsRepaso() {
+  return Object.entries(E.repaso || {})
+    .map(([id, r]) => ({ q: E.preguntas.find(x => x.id === id), r }))
+    .filter(x => x.q && !x.r.q)
+    .sort((a, b) => (b.r.f || '').localeCompare(a.r.f || ''));
+}
+function abrirRepaso() { entrar('repaso'); renderRepaso(); }
+function renderRepaso() {
+  const items = itemsRepaso();
+  const hoy = ahora().slice(0, 10);
+  $('#r-botones').hidden = !items.length;
+  const cont = $('#r-lista');
+  cont.innerHTML = '';
+  items.forEach(({ q, r }) => {
+    const b = el('button', 'item');
+    b.type = 'button';
+    const dia = (r.f || '').slice(0, 10);
+    const cuando = dia === hoy ? 'Hoy' : fechaHora(r.f).slice(0, 8);
+    b.append(
+      el('span', 'tag', (r.motivo === 'pistas' ? '💡 Pistas' : '? Dudosa') + ' · ' + cuando),
+      el('span', 'num', pad(q.num, 3)), document.createTextNode(resumen(q)),
+      el('span', 'sub', q.ruta.slice(2).join(' › '))
+    );
+    b.onclick = async () => {
+      const v = await modal({
+        titulo: `Pregunta ${pad(q.num, 3)}`, mensaje: resumen(q),
+        botones: [
+          { texto: 'Cancelar', valor: null, cancel: true },
+          { texto: 'Quitar de la lista', valor: 'quitar', clase: 'danger' },
+          { texto: '⏱️ Practicar revelando', valor: 'palabras', clase: 'primary' },
+          { texto: '⌨️ Practicar escribiendo', valor: 'tipeo', clase: 'primary' }
+        ]
+      });
+      if (v === 'quitar') { quitarRepaso(q.id); await guardarEstado(); renderRepaso(); }
+      else if (v) empezarRepaso(v, [q.id]);
+    };
+    cont.append(b);
+  });
+  $('#r-lista').hidden = false;
+}
+function empezarRepaso(act, ids) {
+  const alc = ids || itemsRepaso().map(x => x.q.id);
+  if (!alc.length) return;
+  (act === 'tipeo' ? iniciarTipeo : iniciarEval)(null, alc);
+}
+
 /* =====================================================================
    Eventos
    ===================================================================== */
@@ -1478,6 +1643,14 @@ function enlazar() {
   $('#m-crear').onclick = abrirCrear;
   $('#m-evaluar').onclick = abrirActividades;
   $('#m-datos').onclick = abrirDatos;
+  $('#m-repaso').onclick = abrirRepaso;
+  $('#r-volver').onclick = volverMenu;
+  $('#r-pal').onclick = () => empezarRepaso('palabras');
+  $('#r-tip').onclick = () => empezarRepaso('tipeo');
+  $('#e-apr').addEventListener('pointerdown', e => { e.preventDefault(); calificar('palabras', 'apr'); });
+  $('#e-dud').addEventListener('pointerdown', e => { e.preventDefault(); calificar('palabras', 'dud'); });
+  $('#t-apr').addEventListener('pointerdown', e => { e.preventDefault(); calificar('tipeo', 'apr'); });
+  $('#t-dud').addEventListener('pointerdown', e => { e.preventDefault(); calificar('tipeo', 'dud'); });
 
   // crear
   $('#c-volver').onclick = volverMenu;
@@ -1526,6 +1699,8 @@ function enlazar() {
     if (!$('#modal').hidden) return;
     if (actual === 'eval') {
       if (e.key === ' ' && !e.repeat) { e.preventDefault(); accionPrincipal(); }
+      else if (V.estado === 'fin' && !V.calificada && !e.repeat && !e.ctrlKey && !e.metaKey && e.key.toLowerCase() === 'a') { e.preventDefault(); calificar('palabras', 'apr'); }
+      else if (V.estado === 'fin' && !V.calificada && !e.repeat && !e.ctrlKey && !e.metaKey && e.key.toLowerCase() === 'd') { e.preventDefault(); calificar('palabras', 'dud'); }
       else if (e.key === 'Enter' && !e.repeat && ['listo', 'viendo', 'fin'].includes(V.estado)) { e.preventDefault(); accionPrincipal(); }
       else if (e.key === 'Escape') pedirCancelar();
     } else if (actual === 'crear' && (e.ctrlKey || e.metaKey)) {
@@ -1533,7 +1708,8 @@ function enlazar() {
       else if (e.key.toLowerCase() === 'n') { e.preventDefault(); $('#c-nueva').click(); }
     } else if (actual === 'tipeo') {
       if (e.key === 'Escape') pedirCancelarT();
-      else if (e.key === 'Enter' && !e.repeat && T.estado === 'fin') { e.preventDefault(); reintentarT(); }
+      else if (T.estado === 'fin' && !e.repeat && !e.ctrlKey && !e.metaKey && e.key.length === 1 && 'aAdD'.includes(e.key)) { e.preventDefault(); calificar('tipeo', e.key.toLowerCase() === 'a' ? 'apr' : 'dud'); }
+      else if (T.estado === 'fin' && !e.repeat && !e.ctrlKey && !e.metaKey && (e.key === 'r' || e.key === 'R' || e.key === 'Enter')) { e.preventDefault(); reintentarT(); }
       else if (e.key === 'ArrowRight' && !e.repeat && T.estado === 'fin') { e.preventDefault(); siguienteT(); }
       else if (e.key === 'Enter' && !e.repeat && ['listo', 'corriendo', 'viendo'].includes(T.estado)) { e.preventDefault(); pistaT(); }
       else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); tocarTecla(e.key); }
@@ -1600,6 +1776,8 @@ async function sincronizar() {
       }));
     });
 
+    const subirR = Object.entries(E.repaso || {}).map(([id, x]) => ({ id, tipo: x.tipo, motivo: x.motivo, f: x.f, mod: x.mod || 0, q: !!x.q }));
+
     // 2) Un solo viaje: sube lo nuevo y baja el estado completo de la hoja
     const ctl = new AbortController();
     const corte = setTimeout(() => ctl.abort(), 60000);
@@ -1608,7 +1786,7 @@ async function sincronizar() {
       const resp = await fetch(N.url, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ clave: N.clave, disp: N.disp || 'sin nombre', preguntas: subirP, tiempos: subirT, borrar: N.borrados }),
+        body: JSON.stringify({ clave: N.clave, disp: N.disp || 'sin nombre', preguntas: subirP, tiempos: subirT, borrar: N.borrados, repaso: subirR }),
         signal: ctl.signal
       });
       r = await resp.json();
@@ -1678,6 +1856,21 @@ async function sincronizar() {
       bajados++;
     });
 
+    // 5) Repaso: por pregunta gana el cambio más reciente
+    let repBajados = 0;
+    if (Array.isArray(r.repaso)) {
+      E.repaso = E.repaso || {};
+      r.repaso.forEach(x => {
+        if (!x || !x.id || !hay.has(x.id)) return;
+        const l = E.repaso[x.id];
+        if (!l || (x.mod || 0) > (l.mod || 0)) {
+          E.repaso[x.id] = { tipo: x.tipo, motivo: x.motivo, f: x.f, mod: x.mod || 0 };
+          if (x.q) E.repaso[x.id].q = true;
+          repBajados++;
+        }
+      });
+    }
+
     N.vistos = [...enHoja].filter(id => E.preguntas.some(q => q.id === id));
     N.borrados = [];
     N.ultimaSync = t0;
@@ -1688,6 +1881,7 @@ async function sincronizar() {
 
     const partes = [`Preguntas: ${nuevas} nuevas, ${actualizadas} actualizadas${quitadas ? ', ' + quitadas + ' quitadas' : ''}, ${subirP.length} subidas`,
       `Tiempos: ${bajados} bajados, ${subirT.length} subidos`];
+    if (Array.isArray(r.repaso)) partes.push(`Repaso: ${repBajados} cambio${repBajados === 1 ? '' : 's'} bajado${repBajados === 1 ? '' : 's'}`);
     if (r.omitidas) partes.push(`${r.omitidas} fila${r.omitidas === 1 ? '' : 's'} de la hoja incompleta${r.omitidas === 1 ? '' : 's'} (revisá Área, Año, Materia, Actividad, Pregunta y Respuesta)`);
     est.textContent = partes.join(' · ');
     aviso('Sincronizado');
@@ -1730,6 +1924,7 @@ if (mqPC && mqPC.addEventListener) mqPC.addEventListener('change', aplicarModo);
     const guardado = await DB.leer();
     if (guardado) E = Object.assign(E, guardado);
     E.tiemposTipeo = E.tiemposTipeo || {};
+    E.repaso = E.repaso || {};
   } catch (err) {
     almacenamientoOk = false;
     aviso('No se pudo abrir el almacenamiento del navegador.');
