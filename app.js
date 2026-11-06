@@ -10,7 +10,7 @@
    La etiqueta del menú muestra solo número y fecha (sin descripción del cambio).
    Numeración: el primer cambio de un día sube el entero (21, 22…);
    los siguientes del mismo día agregan subversión (20.1, 20.2…). */
-const VERSION = { num: '20.3', fecha: '05/11/26' };
+const VERSION = { num: '21', fecha: '06/11/26' };
 
 /* ---------------- Utilidades ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -1636,14 +1636,17 @@ function renderRepaso() {
         ]
       });
       if (v === 'quitar') { quitarRepaso(q.id); await guardarEstado(); renderRepaso(); }
-      else if (v) empezarRepaso(v, [q.id]);
+      else if (v) empezarRepaso(v, q.id);
     };
     cont.append(b);
   });
   $('#r-lista').hidden = false;
 }
-function empezarRepaso(act, ids) {
-  const alc = ids || itemsRepaso().map(x => x.q.id);
+/** Arranca el repaso: si se elige una pregunta, empieza por ella y sigue con las demás de la lista. */
+function empezarRepaso(act, primero) {
+  let alc = itemsRepaso().map(x => x.q.id);
+  const i = primero ? alc.indexOf(primero) : -1;
+  if (i > 0) alc = alc.slice(i).concat(alc.slice(0, i));
   if (!alc.length) return;
   (act === 'tipeo' ? iniciarTipeo : iniciarEval)(null, alc);
 }
