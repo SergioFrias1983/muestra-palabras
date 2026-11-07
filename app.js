@@ -369,7 +369,7 @@ function mostrar(n) {
 function fondoRepaso() {
   const rondaRepaso = (actual === 'eval' && V.ronda && V.ronda.alcance) || (actual === 'tipeo' && T.ronda && T.ronda.alcance);
   const on = actual === 'repaso' || !!rondaRepaso;
-  document.documentElement.classList.toggle('repaso', on);
+  if (document.documentElement) document.documentElement.classList.toggle('repaso', on);
   const m = document.querySelector('meta[name="theme-color"]');
   if (m && m.setAttribute) m.setAttribute('content', on ? '#2a1a36' : '#1b2130');
 }
