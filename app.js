@@ -10,7 +10,7 @@
    La etiqueta del menú muestra solo número y fecha (sin descripción del cambio).
    Numeración: el primer cambio de un día sube el entero (21, 22…);
    los siguientes del mismo día agregan subversión (20.1, 20.2…). */
-const VERSION = { num: '21', fecha: '06/11/26' };
+const VERSION = { num: '21.1', fecha: '06/11/26' };
 
 /* ---------------- Utilidades ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -362,7 +362,16 @@ let actual = 'menu';
 function mostrar(n) {
   PANTALLAS.forEach(p => ($('#s-' + p).hidden = p !== n));
   actual = n;
+  fondoRepaso();
   window.scrollTo(0, 0);
+}
+/** Fondo violeta mientras se está en «Para repasar» o repitiendo dudosas; el azul de siempre en el resto. */
+function fondoRepaso() {
+  const rondaRepaso = (actual === 'eval' && V.ronda && V.ronda.alcance) || (actual === 'tipeo' && T.ronda && T.ronda.alcance);
+  const on = actual === 'repaso' || !!rondaRepaso;
+  document.documentElement.classList.toggle('repaso', on);
+  const m = document.querySelector('meta[name="theme-color"]');
+  if (m && m.setAttribute) m.setAttribute('content', on ? '#2a1a36' : '#1b2130');
 }
 function entrar(n) {
   const desdeMenu = actual === 'menu';
@@ -1560,6 +1569,7 @@ async function finRonda(act) {
     uno ? 'Repetirla' : `Repetir las ${n}`, 'primary', 'Terminar');
   if (repetir) {
     S2.ronda = nuevaRonda(orden);
+    fondoRepaso();
     const q = listaRonda(S2)[0];
     CARGAR[act](q);
     window.scrollTo(0, 0);

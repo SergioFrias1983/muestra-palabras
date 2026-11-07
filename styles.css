@@ -239,3 +239,6 @@ body.pc #s-tipeo.sin-teclado .acciones{padding-top:8px}
 
 /* ===== Versión (pie del menú) ===== */
 .version{color:var(--muted);opacity:.7;font-size:.8rem;text-align:center;margin:28px 0 4px}
+
+/* ===== Modo repaso: fondo violeta oscuro para distinguirlo de la práctica normal ===== */
+:root.repaso{--bg:#2a1a36;--s1:#35233f;--s2:#42304e;--borde:#5f4873;--muted:#bfb0cf}
