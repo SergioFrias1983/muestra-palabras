@@ -48,8 +48,10 @@ em{color:var(--txt)}
 .btn.big{display:block;width:100%;padding:18px;font-size:1.15rem;margin:10px 0}
 .btn.huge{display:block;width:100%;min-height:64px;padding:16px 10px;font-size:1.35rem;font-weight:700;letter-spacing:.03em}
 .btn.primary{background:var(--pri);border-color:var(--pri);color:var(--pri-txt)}
-.btn.success{background:var(--ok);border-color:var(--ok);color:var(--ok-txt);font-weight:600}
-.btn.danger{background:transparent;border-color:var(--rojo);color:var(--rojo)}
+/* Jerarquía de botones (un solo color de acento): primario = relleno azul; secundario = neutro (.btn);
+   acento suave = contorno azul (.dudosa); destructivo = neutro con texto rojo. «success» usa el estilo primario. */
+.btn.success{background:var(--pri);border-color:var(--pri);color:var(--pri-txt);font-weight:600}
+.btn.danger{background:var(--s2);border-color:var(--borde);color:var(--rojo)}
 .btn.mas{width:52px;padding:0;font-size:1.5rem;flex:none}
 
 /* ===== Formularios ===== */
@@ -225,7 +227,7 @@ body.pc #s-tipeo.sin-teclado .acciones{padding-top:8px}
 @media (max-height:760px){ .respuesta{min-height:96px} }   /* ventanas bajas: más lugar para resultado e historial */
 
 /* ===== Aprendida / Dudosa ===== */
-.btn.dudosa{background:var(--nar);border-color:var(--nar);color:#2a1a08}
+.btn.dudosa{background:transparent;border:2px solid var(--pri);color:var(--pri);font-weight:600}
 .btn.block{display:block;width:100%}
 .acciones .row.calif{margin:0 0 8px}
 .row.calif .btn.huge{flex:1;width:auto;min-height:60px;font-size:1.2rem}
