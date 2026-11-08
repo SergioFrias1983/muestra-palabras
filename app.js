@@ -10,7 +10,7 @@
    La etiqueta del menú muestra solo número y fecha (sin descripción del cambio).
    Numeración: el primer cambio de un día sube el entero (21, 22…);
    los siguientes del mismo día agregan subversión (20.1, 20.2…). */
-const VERSION = { num: '24.3', fecha: '08/11/26' };
+const VERSION = { num: '24.4', fecha: '08/11/26' };
 
 /* ---------------- Utilidades ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -649,6 +649,7 @@ function cargarPreguntaEval(q) {
   V.n = V.idxPal.length;
   V.k = 0;
   V.estado = 'listo';
+  V.bloqueoUI = performance.now() + 700;   // evita que el toque de «Continuar» caiga sobre EMPEZAR / Ver respuesta
   V.calificada = false;
   V.marcaDud = false;
   V.ultimoReg = null;
@@ -804,6 +805,7 @@ async function pedirCancelar() {
 }
 
 async function verRespuesta() {
+  if (performance.now() < (V.bloqueoUI || 0)) return;
   if (!V.q) return;
   if (V.estado === 'corriendo') {
     if (!(await confirmarEnPausa(V, bucle, 'Ver respuesta', 'Si la mostrás, este intento se cancela sin guardarse.', 'Mostrar', 'primary', 'Seguir intentando'))) return;
@@ -828,6 +830,7 @@ function accionPrincipal() {
       break;
     case 'listo':
     case 'viendo':
+      if (performance.now() < (V.bloqueoUI || 0)) return;
       empezar();
       break;
     case 'fin':
@@ -1068,6 +1071,8 @@ function cargarPreguntaTipeo(q) {
   T.errores = 0;
   T.pistas = 0; T.pistaPos = new Set();
   T.estado = 'listo';
+  // El toque que eligió «Continuar» no debe caer sobre «Pista» / «Ver respuesta», que aparecen en el mismo lugar
+  T.bloqueoUI = performance.now() + 700;
   T.calificada = false;
   T.marcaDud = false;
   T.ultimoReg = null;
@@ -1245,6 +1250,7 @@ function tocarTecla(raw) {
 
 /** Pista: escribe sola la próxima letra (queda marcada y se anota en el intento). */
 function pistaT() {
+  if (performance.now() < (T.bloqueoUI || 0)) return;
   if (T.estado === 'sinPregunta') { aviso('Elegí una pregunta de la lista.'); return; }
   if (T.estado === 'fin' || !T.total) return;
   audio();
@@ -1308,7 +1314,7 @@ function cancelarTipeo() {
 }
 
 async function verRespuestaT() {
-  if (!T.q) return;
+  if (!T.q || performance.now() < (T.bloqueoUI || 0)) return;
   if (T.estado === 'corriendo') {
     if (!(await confirmarEnPausa(T, bucleT, 'Ver respuesta', 'Si la mostrás, este intento se cancela sin guardarse.', 'Mostrar', 'primary', 'Seguir intentando'))) return;
   }
