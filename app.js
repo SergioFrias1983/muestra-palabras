@@ -10,7 +10,7 @@
    La etiqueta del menú muestra solo número y fecha (sin descripción del cambio).
    Numeración: el primer cambio de un día sube el entero (21, 22…);
    los siguientes del mismo día agregan subversión (20.1, 20.2…). */
-const VERSION = { num: '23', fecha: '07/11/26' };
+const VERSION = { num: '24', fecha: '08/11/26' };
 
 /* ---------------- Utilidades ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -650,6 +650,7 @@ function cargarPreguntaEval(q) {
   V.k = 0;
   V.estado = 'listo';
   V.calificada = false;
+  V.marcaDud = false;
   V.ultimoReg = null;
   $('#e-pregunta').textContent = q.pregunta;
   setReloj(0);
@@ -685,6 +686,7 @@ function botones() {
   main.textContent = etiquetas[V.estado];
   const pideCalif = V.estado === 'fin' && !V.calificada;
   $('#e-calif').hidden = !pideCalif;
+  actualizarDud('palabras');
   main.className = V.estado === 'fin' ? 'btn block' : 'btn primary huge';
   $('#e-ver').disabled = V.estado === 'sinPregunta';
   $('#e-cancelar').disabled = V.estado !== 'corriendo';
@@ -1064,6 +1066,7 @@ function cargarPreguntaTipeo(q) {
   T.pistas = 0; T.pistaPos = new Set();
   T.estado = 'listo';
   T.calificada = false;
+  T.marcaDud = false;
   T.ultimoReg = null;
   T.pasado = false;
   $('#t-pregunta').textContent = q.pregunta;
@@ -1099,8 +1102,7 @@ function botonesT() {
   $('#t-main').hidden = !fin;
   $('#t-main').className = 'btn block';
   $('#t-calif').hidden = !(fin && !T.calificada);
-  $('#t-apr').hidden = !!T.pistas;
-  $('#t-dud').textContent = T.pistas ? 'Continuar ›' : '? Dudosa';
+  actualizarDud('tipeo');
   $('#t-teclado').className = 'teclado' + (T.estado === 'sinPregunta' ? ' apagado' : '');
   $('#t-ver').disabled = T.estado === 'sinPregunta';
   $('#t-pista').disabled = T.estado === 'sinPregunta' || fin;
@@ -1110,26 +1112,12 @@ function botonesT() {
   $('#s-tipeo').classList.toggle('en-curso', T.estado === 'corriendo');
   $('#s-tipeo').classList.toggle('terminado', fin);
   $('#t-row-ayuda').hidden = fin;
-  const sig = fin ? siguienteDeT() : null;
-  $('#t-fin-row').hidden = !sig;
-  if (sig) $('#t-sig').textContent = 'Saltar sin calificar ›';
   $('#t-ayuda').textContent = fin
-    ? (T.pistas ? 'D = continuar' : 'A = aprendida · D = dudosa') + ' · R = reintentar' + (sig ? ' · → saltar' : '')
+    ? 'C o → = continuar · R = reintentar · D = agregar a «Para repasar»'
     : 'Escribí con tu teclado · Enter = pista · Esc cancela el intento';
 }
 
 /** La pregunta que sigue en la misma actividad (si es la última, vuelve a la primera). */
-function siguienteDeT() {
-  if (!T.q) return null;
-  const l = listaRonda(T);
-  if (l.length < 2) return null;
-  const i = l.findIndex(q => q.id === T.q.id);
-  return { q: l[(i + 1) % l.length], vuelta: i + 1 >= l.length };
-}
-function siguienteT() {
-  if (T.estado !== 'fin' || T.calificada) return;
-  saltar('tipeo');
-}
 
 /** Al terminar: lleva la vista al resultado (récord, bueno o malo), justo debajo del reloj. */
 function verResultado(selResultado, selMarcador) {
@@ -1352,7 +1340,6 @@ function enlazarTipeo() {
   };
   $('#t-cancelar').onclick = pedirCancelarT;
   $('#t-main').onclick = reintentarT;
-  $('#t-sig').onclick = siguienteT;
   $('#t-h-ultimos').onclick = () => { T.vistaHist = 'ultimos'; renderHistorial(CFG.tipeo); };
   $('#t-h-mejores').onclick = () => { T.vistaHist = 'mejores'; renderHistorial(CFG.tipeo); };
 }
@@ -1598,7 +1585,7 @@ async function avanzarRonda(act) {
 async function calificar(act, valor) {
   const S2 = CFG[act].S();
   if (S2.estado !== 'fin' || S2.calificada || !S2.q || performance.now() < S2.bloqueo) return;
-  if (act === 'tipeo' && S2.pistas) valor = 'dud';
+  if (S2.marcaDud || (act === 'tipeo' && S2.pistas)) valor = 'dud';
   S2.calificada = true;
   const id = S2.q.id;
   S2.ronda.hechas.add(id);
@@ -1612,12 +1599,21 @@ async function calificar(act, valor) {
   await guardarEstado();
   await avanzarRonda(act);
 }
-async function saltar(act) {
+/** Botoncito «Para repasar»: marca (o desmarca) la pregunta para que quede en la lista. */
+function toggleDud(act) {
   const S2 = CFG[act].S();
   if (S2.estado !== 'fin' || S2.calificada || !S2.q) return;
-  S2.calificada = true;
-  S2.ronda.hechas.add(S2.q.id);
-  await avanzarRonda(act);
+  if (act === 'tipeo' && S2.pistas) return;   // con pistas va siempre a repaso
+  S2.marcaDud = !S2.marcaDud;
+  actualizarDud(act);
+}
+function actualizarDud(act) {
+  const S2 = CFG[act].S();
+  const b = $('#' + (act === 'tipeo' ? 't' : 'e') + '-dud');
+  const on = !!S2.marcaDud || (act === 'tipeo' && !!S2.pistas);
+  b.textContent = on ? '★ En repaso' : '☆ Para repasar';
+  b.classList.toggle('on', on);
+  b.disabled = act === 'tipeo' && !!S2.pistas;
 }
 
 /* ----- Pantalla "Para repasar" ----- */
@@ -1684,9 +1680,9 @@ function enlazar() {
   $('#r-pal').onclick = () => empezarRepaso('palabras');
   $('#r-tip').onclick = () => empezarRepaso('tipeo');
   $('#e-apr').addEventListener('pointerdown', e => { e.preventDefault(); calificar('palabras', 'apr'); });
-  $('#e-dud').addEventListener('pointerdown', e => { e.preventDefault(); calificar('palabras', 'dud'); });
+  $('#e-dud').addEventListener('pointerdown', e => { e.preventDefault(); toggleDud('palabras'); });
   $('#t-apr').addEventListener('pointerdown', e => { e.preventDefault(); calificar('tipeo', 'apr'); });
-  $('#t-dud').addEventListener('pointerdown', e => { e.preventDefault(); calificar('tipeo', 'dud'); });
+  $('#t-dud').addEventListener('pointerdown', e => { e.preventDefault(); toggleDud('tipeo'); });
 
   // crear
   $('#c-volver').onclick = volverMenu;
@@ -1735,8 +1731,8 @@ function enlazar() {
     if (!$('#modal').hidden) return;
     if (actual === 'eval') {
       if (e.key === ' ' && !e.repeat) { e.preventDefault(); accionPrincipal(); }
-      else if (V.estado === 'fin' && !V.calificada && !e.repeat && !e.ctrlKey && !e.metaKey && e.key.toLowerCase() === 'a') { e.preventDefault(); calificar('palabras', 'apr'); }
-      else if (V.estado === 'fin' && !V.calificada && !e.repeat && !e.ctrlKey && !e.metaKey && e.key.toLowerCase() === 'd') { e.preventDefault(); calificar('palabras', 'dud'); }
+      else if (V.estado === 'fin' && !V.calificada && !e.repeat && !e.ctrlKey && !e.metaKey && e.key.toLowerCase() === 'c') { e.preventDefault(); calificar('palabras', 'apr'); }
+      else if (V.estado === 'fin' && !V.calificada && !e.repeat && !e.ctrlKey && !e.metaKey && e.key.toLowerCase() === 'd') { e.preventDefault(); toggleDud('palabras'); }
       else if (e.key === 'Enter' && !e.repeat && ['listo', 'viendo', 'fin'].includes(V.estado)) { e.preventDefault(); accionPrincipal(); }
       else if (e.key === 'Escape') pedirCancelar();
     } else if (actual === 'crear' && (e.ctrlKey || e.metaKey)) {
@@ -1744,9 +1740,9 @@ function enlazar() {
       else if (e.key.toLowerCase() === 'n') { e.preventDefault(); $('#c-nueva').click(); }
     } else if (actual === 'tipeo') {
       if (e.key === 'Escape') pedirCancelarT();
-      else if (T.estado === 'fin' && !e.repeat && !e.ctrlKey && !e.metaKey && e.key.length === 1 && 'aAdD'.includes(e.key)) { e.preventDefault(); calificar('tipeo', e.key.toLowerCase() === 'a' ? 'apr' : 'dud'); }
+      else if (T.estado === 'fin' && !e.repeat && !e.ctrlKey && !e.metaKey && e.key.length === 1 && 'cCdD'.includes(e.key)) { e.preventDefault(); if (e.key.toLowerCase() === 'c') calificar('tipeo', 'apr'); else toggleDud('tipeo'); }
       else if (T.estado === 'fin' && !e.repeat && !e.ctrlKey && !e.metaKey && (e.key === 'r' || e.key === 'R' || e.key === 'Enter')) { e.preventDefault(); reintentarT(); }
-      else if (e.key === 'ArrowRight' && !e.repeat && T.estado === 'fin') { e.preventDefault(); siguienteT(); }
+      else if (e.key === 'ArrowRight' && !e.repeat && T.estado === 'fin') { e.preventDefault(); calificar('tipeo', 'apr'); }
       else if (e.key === 'Enter' && !e.repeat && ['listo', 'corriendo', 'viendo'].includes(T.estado)) { e.preventDefault(); pistaT(); }
       else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); tocarTecla(e.key); }
     }
