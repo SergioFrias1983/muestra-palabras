@@ -132,6 +132,11 @@
       <button class="btn huge success" id="e-apr">Continuar ›</button>
       <button class="btn small dudosa" id="e-dud" title="Agregar esta pregunta a «Para repasar»">☆ Para repasar</button>
     </div>
+    <div class="row calif calif3" id="e-rep" hidden>
+      <button class="btn success" id="e-r-apr">✓ Aprendida</button>
+      <button class="btn dudosa" id="e-r-dud">? Dudosa</button>
+      <button class="btn" id="e-r-rep">↻ Repetir</button>
+    </div>
     <button class="btn primary huge" id="e-main">ELEGÍ UNA PREGUNTA</button>
     <div class="row">
       <button class="btn grow" id="e-ver">Ver respuesta</button>
@@ -192,6 +197,11 @@
       <button class="btn huge success" id="t-apr">Continuar ›</button>
       <button class="btn small dudosa" id="t-dud" title="Agregar esta pregunta a «Para repasar»">☆ Para repasar</button>
     </div>
+    <div class="row calif calif3" id="t-rep" hidden>
+      <button class="btn success" id="t-r-apr">✓ Aprendida</button>
+      <button class="btn dudosa" id="t-r-dud">? Dudosa</button>
+      <button class="btn" id="t-r-rep">↻ Repetir</button>
+    </div>
     <button class="btn primary huge" id="t-main" hidden>REINTENTAR</button>
     <div class="row" id="t-row-ayuda">
       <button class="btn grow" id="t-pista" title="Te muestra la próxima letra (Enter en la computadora)">💡 Pista</button>
@@ -206,7 +216,7 @@
     <button class="btn small" id="r-volver">‹ Menú</button>
     <h2>Para repasar</h2>
   </header>
-  <p class="muted">Acá quedan las preguntas que marcaste como <b>Dudosa</b> o que respondiste con <b>pistas</b>. Salen de la lista cuando las marcás como <b>Aprendida</b>.</p>
+  <p class="muted">Acá quedan las preguntas que marcaste como <b>Dudosa</b> o que respondiste con <b>pistas</b>. Mientras repasás, al terminar cada pregunta elegís <b>Aprendida</b> (sale de la lista), <b>Dudosa</b> o <b>Repetir</b> (siguen para una ronda posterior).</p>
   <div id="r-botones" class="row">
     <button class="btn grow" id="r-pal">⏱️ Repasar revelando</button>
     <button class="btn grow" id="r-tip">⌨️ Repasar escribiendo</button>

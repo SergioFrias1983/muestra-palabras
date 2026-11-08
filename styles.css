@@ -247,3 +247,8 @@ body.pc #s-tipeo.sin-teclado .acciones{padding-top:8px}
 
 /* ===== Modo repaso: fondo violeta oscuro para distinguirlo de la práctica normal ===== */
 :root.repaso{--bg:#2a1a36;--s1:#35233f;--s2:#42304e;--borde:#5f4873;--muted:#bfb0cf}
+
+/* Repaso: tres opciones al terminar (Aprendida / Dudosa / Repetir) */
+.row.calif3 .btn{flex:1;width:auto;min-height:60px;padding:4px 6px;font-size:1rem;font-weight:700}
+.row.calif3 .btn.dudosa{flex:1;width:auto}
+.row.calif3 .btn{white-space:nowrap;font-size:.92rem}
