@@ -10,7 +10,7 @@
    La etiqueta del menú muestra solo número y fecha (sin descripción del cambio).
    Numeración: el primer cambio de un día sube el entero (21, 22…);
    los siguientes del mismo día agregan subversión (20.1, 20.2…). */
-const VERSION = { num: '24.1', fecha: '08/11/26' };
+const VERSION = { num: '24.2', fecha: '08/11/26' };
 
 /* ---------------- Utilidades ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -1596,14 +1596,24 @@ async function calificar(act, valor) {
   const S2 = CFG[act].S();
   if (S2.estado !== 'fin' || S2.calificada || !S2.q || performance.now() < S2.bloqueo) return;
   if (valor === 'apr' && (S2.marcaDud || (act === 'tipeo' && S2.pistas))) valor = 'dud';
-  S2.calificada = true;
   const id = S2.q.id;
+  if (valor === 'rep') {
+    // Repetir: queda en «Para repasar» y la misma pregunta arranca de nuevo enseguida
+    const ya = E.repaso[id];
+    if (!ya || ya.q) marcarRepaso(id, act, act === 'tipeo' && S2.pistas ? 'pistas' : 'repetir');
+    await guardarEstado();
+    if (act === 'palabras') empezar();
+    else cargarPreguntaTipeo(S2.q);
+    window.scrollTo(0, 0);
+    return;
+  }
+  S2.calificada = true;
   S2.ronda.hechas.add(id);
   if (valor === 'apr') {
     quitarRepaso(id);
     S2.ronda.dudosas.delete(id);
   } else {
-    marcarRepaso(id, act, act === 'tipeo' && S2.pistas ? 'pistas' : (valor === 'rep' ? 'repetir' : 'dudosa'));
+    marcarRepaso(id, act, act === 'tipeo' && S2.pistas ? 'pistas' : 'dudosa');
     S2.ronda.dudosas.add(id);
   }
   await guardarEstado();
