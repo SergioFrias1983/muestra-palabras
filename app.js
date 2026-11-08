@@ -10,7 +10,7 @@
    La etiqueta del menú muestra solo número y fecha (sin descripción del cambio).
    Numeración: el primer cambio de un día sube el entero (21, 22…);
    los siguientes del mismo día agregan subversión (20.1, 20.2…). */
-const VERSION = { num: '24.2', fecha: '08/11/26' };
+const VERSION = { num: '24.3', fecha: '08/11/26' };
 
 /* ---------------- Utilidades ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -1610,7 +1610,8 @@ async function calificar(act, valor) {
   S2.calificada = true;
   S2.ronda.hechas.add(id);
   if (valor === 'apr') {
-    quitarRepaso(id);
+    // Solo se quita de «Para repasar» si se respondió desde el repaso; fuera de él, Continuar no la toca
+    if (enRepaso(S2)) quitarRepaso(id);
     S2.ronda.dudosas.delete(id);
   } else {
     marcarRepaso(id, act, act === 'tipeo' && S2.pistas ? 'pistas' : 'dudosa');
