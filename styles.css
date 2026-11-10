@@ -166,10 +166,9 @@ textarea{resize:vertical;line-height:1.5}
 .teclado{display:flex;flex-direction:column;gap:6px;margin-bottom:2px;user-select:none;-webkit-user-select:none}
 .teclado.apagado{opacity:.5}
 .tecla-fila{display:flex;gap:4px;justify-content:center}
-.tecla{flex:1;max-width:54px;min-height:52px;padding:0;background:var(--s2);color:var(--txt);border:1px solid var(--borde);
+.tecla{flex:0 0 calc((100% - 36px) / 10);max-width:56px;min-height:50px;padding:0;background:var(--s2);color:var(--txt);border:1px solid var(--borde);
   border-radius:10px;font:600 1.4rem system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;touch-action:manipulation;cursor:pointer}
-.tecla-fila.nums .tecla{min-height:40px;font-size:1.1rem}
-@media (max-height:700px){ .tecla{min-height:46px} .tecla-fila.nums .tecla{min-height:36px} }
+@media (max-height:700px){ .tecla{min-height:44px} }
 .tecla:active{background:var(--pri);border-color:var(--pri);color:var(--pri-txt)}
 .tecla.mal{background:var(--rojo);border-color:var(--rojo);color:#3a0d0d}
 .respuesta.error{border-color:var(--rojo);animation:temblor .3s}
