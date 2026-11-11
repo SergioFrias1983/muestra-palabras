@@ -10,7 +10,7 @@
    La etiqueta del menú muestra solo número y fecha (sin descripción del cambio).
    Numeración: el primer cambio de un día sube el entero (21, 22…);
    los siguientes del mismo día agregan subversión (20.1, 20.2…). */
-const VERSION = { num: '26.1', fecha: '11/11/26' };
+const VERSION = { num: '26.2', fecha: '11/11/26' };
 
 /* ---------------- Utilidades ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -1665,14 +1665,18 @@ function itemsRepaso() {
 }
 /* ----- Pantalla «Mi progreso» ----- */
 /** Estudio por vueltas: una vuelta es un recorrido por todas las preguntas de la carpeta. Se calcula con los intentos
-    ya guardados (los hechos con pistas no cuentan): vueltas completas = el mínimo de intentos entre las preguntas. */
+    ya guardados: los hechos con pistas no cuentan, y varios intentos de la misma pregunta en un mismo día cuentan uno solo.
+    Vueltas completas = el mínimo de días con intento válido entre las preguntas. */
 function progresoVuelta(ruta, act) {
   const tiempos = (act === 'tipeo' ? E.tiemposTipeo : E.tiempos) || {};
   const lista = pregs(ruta);
-  const n = lista.map(q => (tiempos[q.id] || []).filter(x => !(x.h > 0)).length);
+  const dias = q => new Set((tiempos[q.id] || []).filter(x => !(x.h > 0)).map(x => String(x.f || '').slice(0, 10)));
+  const n = lista.map(q => dias(q).size);
   const min = n.length ? Math.min(...n) : 0;
   const pend = lista.filter((q, i) => n[i] === min);
-  return { lista, min, pend, hechas: lista.length - pend.length };
+  const hoy = ahora().slice(0, 10);
+  const todasHoy = lista.length > 0 && lista.every(q => dias(q).has(hoy));
+  return { lista, min, pend, hechas: lista.length - pend.length, todasHoy };
 }
 function abrirProgreso() { entrar('progreso'); renderProgreso(); }
 function renderProgreso() {
@@ -1702,8 +1706,8 @@ function renderProgreso() {
       barra.append(rell);
       fila.append(cab, barra);
       if (sig) {
-        if (!hechas && min) fila.append(el('p', 'muted prog-ok', `✓ Vuelta ${min} completa`));
-        const txt = hechas ? `Retomar en la ${pad(sig.num, 3)} ›` : (min ? `Empezar la vuelta ${min + 1} ›` : `Empezar en la ${pad(sig.num, 3)} ›`);
+        if (!hechas && min) fila.append(el('p', 'muted prog-ok', `✓ Vuelta ${min} completa` + (p.todasHoy ? ' hoy. Lo que practiques hoy de nuevo no suma: la vuelta siguiente cuenta desde mañana.' : '')));
+        const txt = hechas ? `Retomar en la ${pad(sig.num, 3)} ›` : (min ? (p.todasHoy ? 'Practicar igual ›' : `Empezar la vuelta ${min + 1} ›`) : `Empezar en la ${pad(sig.num, 3)} ›`);
         const b = el('button', 'btn small primary', txt);
         b.onclick = () => iniciar(ruta, pend.map(q => q.id), true);
         fila.append(b);
