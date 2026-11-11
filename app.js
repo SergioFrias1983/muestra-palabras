@@ -10,7 +10,7 @@
    La etiqueta del menú muestra solo número y fecha (sin descripción del cambio).
    Numeración: el primer cambio de un día sube el entero (21, 22…);
    los siguientes del mismo día agregan subversión (20.1, 20.2…). */
-const VERSION = { num: '26', fecha: '11/11/26' };
+const VERSION = { num: '26.1', fecha: '11/11/26' };
 
 /* ---------------- Utilidades ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -367,7 +367,7 @@ function mostrar(n) {
 }
 /** Fondo violeta mientras se está en «Para repasar» o repitiendo dudosas; el azul de siempre en el resto. */
 function fondoRepaso() {
-  const rondaRepaso = (actual === 'eval' && V.ronda && V.ronda.alcance) || (actual === 'tipeo' && T.ronda && T.ronda.alcance);
+  const rondaRepaso = (actual === 'eval' && enRepaso(V)) || (actual === 'tipeo' && enRepaso(T));
   const on = actual === 'repaso' || !!rondaRepaso;
   if (document.documentElement) document.documentElement.classList.toggle('repaso', on);
   const m = document.querySelector('meta[name="theme-color"]');
@@ -599,9 +599,9 @@ const V = {
   vistaHist: 'ultimos'  // 'ultimos' | 'mejores'
 };
 
-function iniciarEval(ruta, alcance) {
+function iniciarEval(ruta, alcance, vuelta) {
   V.ruta = ruta;
-  V.ronda = nuevaRonda(alcance);
+  V.ronda = nuevaRonda(alcance, vuelta);
   entrar('eval');
   pintarRutaRonda('#e-ruta', ruta, alcance);
   V.q = null;
@@ -1017,9 +1017,9 @@ function pintarRuta(sel, ruta) {
 }
 
 /* ----- Pantalla ----- */
-function iniciarTipeo(ruta, alcance) {
+function iniciarTipeo(ruta, alcance, vuelta) {
   T.ruta = ruta;
-  T.ronda = nuevaRonda(alcance);
+  T.ronda = nuevaRonda(alcance, vuelta);
   entrar('tipeo');
   pintarRutaRonda('#t-ruta', ruta, alcance);
   construirTeclado();
@@ -1513,11 +1513,12 @@ async function importarTxt(files) {
    - Al terminar cada pregunta se elige Aprendida o Dudosa y se pasa a la siguiente.
    - Las Dudosas (y las hechas con pistas) quedan en E.repaso y se repiten al final de la ronda.
    ===================================================================== */
-const nuevaRonda = alcance => ({ alcance: alcance || null, hechas: new Set(), dudosas: new Set() });
+/** vuelta = true: recorrido de estudio por «Mi progreso» (solo las pendientes de la vuelta); no es el modo repaso. */
+const nuevaRonda = (alcance, vuelta) => ({ alcance: alcance || null, vuelta: !!vuelta, hechas: new Set(), dudosas: new Set() });
 const CARGAR = { palabras: q => { cargarPreguntaEval(q); $('#e-preguntas').open = false; }, tipeo: q => { cargarPreguntaTipeo(q); $('#t-preguntas').open = false; } };
 
 /** ¿Se está repasando (lista «Para repasar» o repitiendo dudosas)? */
-function enRepaso(S2) { return !!(S2.ronda && S2.ronda.alcance); }
+function enRepaso(S2) { return !!(S2.ronda && S2.ronda.alcance && !S2.ronda.vuelta); }
 
 function listaRonda(S2) {
   if (S2.ronda && S2.ronda.alcance) return S2.ronda.alcance.map(id => E.preguntas.find(q => q.id === id)).filter(Boolean);
@@ -1529,7 +1530,7 @@ function textoRonda(S2) {
   return ` · Ronda: ${r.hechas.size} hecha${r.hechas.size === 1 ? '' : 's'}` + (r.dudosas.size ? `, ${r.dudosas.size} dudosa${r.dudosas.size === 1 ? '' : 's'}` : '');
 }
 function pintarRutaRonda(sel, ruta, alcance) {
-  if (!alcance) return pintarRuta(sel, ruta);
+  if (!alcance || ruta) return pintarRuta(sel, ruta);
   const c = $(sel);
   c.textContent = '';
   c.append(el('span', 'tr tr3', 'Para repasar'));
@@ -1559,6 +1560,18 @@ async function finRonda(act) {
   const pend = new Set(itemsRepaso().map(x => x.q.id));
   const orden = listaRonda(S2).filter(q => pend.has(q.id) || S2.ronda.dudosas.has(q.id)).map(q => q.id);
   const alcanceActual = S2.ronda.alcance;
+  if (S2.ronda.vuelta && !S2.ronda.dudosas.size) {
+    // Terminó la vuelta de «Mi progreso»
+    const n = progresoVuelta(S2.ruta, act).min;
+    S2.ronda = nuevaRonda(null);
+    await modal({
+      titulo: `¡Vuelta ${n} completa! 🎉`, mensaje: 'Respondiste todas las preguntas de esta vuelta.',
+      botones: [{ texto: 'Ver mi progreso', valor: true, clase: 'primary' }]
+    });
+    await volverMenu();
+    abrirProgreso();
+    return;
+  }
   if (!orden.length && alcanceActual && !pend.size) {
     // Terminó el repaso: aviso y vuelta a la pantalla de inicio
     S2.ronda = nuevaRonda(alcanceActual);
@@ -1651,10 +1664,15 @@ function itemsRepaso() {
     .sort((a, b) => (b.r.f || '').localeCompare(a.r.f || ''));
 }
 /* ----- Pantalla «Mi progreso» ----- */
-/** Una pregunta cuenta como respondida si tiene algún intento terminado; los hechos con pistas no cuentan. */
-function respondida(q, act) {
-  const arr = ((act === 'tipeo' ? E.tiemposTipeo : E.tiempos) || {})[q.id] || [];
-  return arr.some(x => !(x.h > 0));
+/** Estudio por vueltas: una vuelta es un recorrido por todas las preguntas de la carpeta. Se calcula con los intentos
+    ya guardados (los hechos con pistas no cuentan): vueltas completas = el mínimo de intentos entre las preguntas. */
+function progresoVuelta(ruta, act) {
+  const tiempos = (act === 'tipeo' ? E.tiemposTipeo : E.tiempos) || {};
+  const lista = pregs(ruta);
+  const n = lista.map(q => (tiempos[q.id] || []).filter(x => !(x.h > 0)).length);
+  const min = n.length ? Math.min(...n) : 0;
+  const pend = lista.filter((q, i) => n[i] === min);
+  return { lista, min, pend, hechas: lista.length - pend.length };
 }
 function abrirProgreso() { entrar('progreso'); renderProgreso(); }
 function renderProgreso() {
@@ -1672,22 +1690,23 @@ function renderProgreso() {
     card.append(el('h3', '', ruta.join(' › ')));
     [['palabras', '⏱️ Revelar palabras', iniciarEval, cargarPreguntaEval, '#e-preguntas'],
      ['tipeo', '⌨️ Escribir letra por letra', iniciarTipeo, cargarPreguntaTipeo, '#t-preguntas']].forEach(([act, nombre, iniciar, cargar, panel]) => {
-      const hechas = lista.filter(q => respondida(q, act)).length;
-      const sig = lista.find(q => !respondida(q, act));
+      const p = progresoVuelta(ruta, act);
+      const { hechas, pend, min } = p;
+      const sig = pend[0];
       const fila = el('div', 'prog-fila');
       const cab = el('div', 'prog-cab');
-      cab.append(el('span', '', nombre), el('span', 'prog-n', `${hechas} / ${lista.length}`));
+      cab.append(el('span', '', nombre), el('span', 'prog-n', lista.length ? `Vuelta ${min + 1} · ${hechas} / ${lista.length}` : '—'));
       const barra = el('div', 'barra');
       const rell = el('div', 'prog-rell');
       rell.style.width = (lista.length ? Math.round(100 * hechas / lista.length) : 0) + '%';
       barra.append(rell);
       fila.append(cab, barra);
       if (sig) {
-        const b = el('button', 'btn small primary', (hechas ? 'Retomar' : 'Empezar') + ` en la ${pad(sig.num, 3)} ›`);
-        b.onclick = () => { iniciar(ruta); cargar(sig); $(panel).open = false; };
+        if (!hechas && min) fila.append(el('p', 'muted prog-ok', `✓ Vuelta ${min} completa`));
+        const txt = hechas ? `Retomar en la ${pad(sig.num, 3)} ›` : (min ? `Empezar la vuelta ${min + 1} ›` : `Empezar en la ${pad(sig.num, 3)} ›`);
+        const b = el('button', 'btn small primary', txt);
+        b.onclick = () => iniciar(ruta, pend.map(q => q.id), true);
         fila.append(b);
-      } else {
-        fila.append(el('p', 'muted prog-ok', '✓ Completa: respondiste todas las preguntas'));
       }
       card.append(fila);
     });
