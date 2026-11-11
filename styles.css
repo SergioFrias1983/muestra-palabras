@@ -252,3 +252,13 @@ body.pc #s-tipeo.sin-teclado .acciones{padding-top:8px}
 .row.calif3 .btn{flex:1;width:auto;min-height:60px;padding:4px 6px;font-size:1rem;font-weight:700}
 .row.calif3 .btn.dudosa{flex:1;width:auto}
 .row.calif3 .btn{white-space:nowrap;font-size:.92rem}
+
+/* ===== Mi progreso ===== */
+.prog h3{margin:0 0 10px;font-size:1rem}
+.prog-fila{margin-bottom:14px}
+.prog-fila:last-child{margin-bottom:0}
+.prog-cab{display:flex;justify-content:space-between;margin-bottom:6px}
+.prog-n{font-variant-numeric:tabular-nums;color:var(--muted)}
+.prog-rell{height:100%;background:var(--pri);border-radius:99px}
+.prog-fila .btn{margin-top:8px}
+.prog-ok{margin:8px 0 0}

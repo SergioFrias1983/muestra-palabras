@@ -10,7 +10,7 @@
    La etiqueta del menú muestra solo número y fecha (sin descripción del cambio).
    Numeración: el primer cambio de un día sube el entero (21, 22…);
    los siguientes del mismo día agregan subversión (20.1, 20.2…). */
-const VERSION = { num: '25.1', fecha: '10/11/26' };
+const VERSION = { num: '26', fecha: '11/11/26' };
 
 /* ---------------- Utilidades ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -356,7 +356,7 @@ function crearSelector(cont, alCambiar, gestion = false) {
 }
 
 /* ---------------- Navegación ---------------- */
-const PANTALLAS = ['menu', 'act', 'crear', 'sel', 'eval', 'tipeo', 'datos', 'repaso'];
+const PANTALLAS = ['menu', 'act', 'crear', 'sel', 'eval', 'tipeo', 'datos', 'repaso', 'progreso'];
 let actual = 'menu';
 
 function mostrar(n) {
@@ -1650,6 +1650,50 @@ function itemsRepaso() {
     .filter(x => x.q && !x.r.q)
     .sort((a, b) => (b.r.f || '').localeCompare(a.r.f || ''));
 }
+/* ----- Pantalla «Mi progreso» ----- */
+/** Una pregunta cuenta como respondida si tiene algún intento terminado; los hechos con pistas no cuentan. */
+function respondida(q, act) {
+  const arr = ((act === 'tipeo' ? E.tiemposTipeo : E.tiempos) || {})[q.id] || [];
+  return arr.some(x => !(x.h > 0));
+}
+function abrirProgreso() { entrar('progreso'); renderProgreso(); }
+function renderProgreso() {
+  const cont = $('#p-lista');
+  cont.innerHTML = '';
+  const grupos = new Map();
+  E.preguntas.forEach(q => {
+    const k = q.ruta.join('\u0001');
+    if (!grupos.has(k)) grupos.set(k, q.ruta);
+  });
+  if (!grupos.size) { cont.append(el('p', 'muted centro', 'Todavía no hay preguntas.')); return; }
+  [...grupos.values()].sort((a, b) => a.join('/').localeCompare(b.join('/'), 'es')).forEach(ruta => {
+    const lista = pregs(ruta);
+    const card = el('section', 'panel prog');
+    card.append(el('h3', '', ruta.join(' › ')));
+    [['palabras', '⏱️ Revelar palabras', iniciarEval, cargarPreguntaEval, '#e-preguntas'],
+     ['tipeo', '⌨️ Escribir letra por letra', iniciarTipeo, cargarPreguntaTipeo, '#t-preguntas']].forEach(([act, nombre, iniciar, cargar, panel]) => {
+      const hechas = lista.filter(q => respondida(q, act)).length;
+      const sig = lista.find(q => !respondida(q, act));
+      const fila = el('div', 'prog-fila');
+      const cab = el('div', 'prog-cab');
+      cab.append(el('span', '', nombre), el('span', 'prog-n', `${hechas} / ${lista.length}`));
+      const barra = el('div', 'barra');
+      const rell = el('div', 'prog-rell');
+      rell.style.width = (lista.length ? Math.round(100 * hechas / lista.length) : 0) + '%';
+      barra.append(rell);
+      fila.append(cab, barra);
+      if (sig) {
+        const b = el('button', 'btn small primary', (hechas ? 'Retomar' : 'Empezar') + ` en la ${pad(sig.num, 3)} ›`);
+        b.onclick = () => { iniciar(ruta); cargar(sig); $(panel).open = false; };
+        fila.append(b);
+      } else {
+        fila.append(el('p', 'muted prog-ok', '✓ Completa: respondiste todas las preguntas'));
+      }
+      card.append(fila);
+    });
+    cont.append(card);
+  });
+}
 function abrirRepaso() { entrar('repaso'); renderRepaso(); }
 function renderRepaso() {
   const items = itemsRepaso();
@@ -1703,6 +1747,8 @@ function enlazar() {
   $('#m-evaluar').onclick = abrirActividades;
   $('#m-datos').onclick = abrirDatos;
   $('#m-repaso').onclick = abrirRepaso;
+  $('#m-progreso').onclick = abrirProgreso;
+  $('#p-volver').onclick = volverMenu;
   $('#r-volver').onclick = volverMenu;
   $('#r-pal').onclick = () => empezarRepaso('palabras');
   $('#r-tip').onclick = () => empezarRepaso('tipeo');

@@ -22,6 +22,7 @@
   <button class="btn big" id="m-crear">Crear preguntas</button>
   <button class="btn big primary" id="m-evaluar">Evaluar lo aprendido</button>
   <button class="btn big" id="m-repaso">Para repasar</button>
+  <button class="btn big" id="m-progreso">Mi progreso</button>
   <button class="btn big" id="m-datos">Copia de seguridad e importar</button>
   <button class="btn big" id="m-sync" hidden>☁️ Sincronizar con Google Sheet</button>
   <p id="m-sync-info" class="muted centro"></p>
@@ -222,6 +223,16 @@
     <button class="btn grow" id="r-tip">⌨️ Repasar escribiendo</button>
   </div>
   <div id="r-lista" class="lista"></div>
+</section>
+
+<!-- ============ MI PROGRESO ============ -->
+<section id="s-progreso" class="screen" hidden>
+  <header class="bar">
+    <button class="btn small" id="p-volver">‹ Menú</button>
+    <h2>Mi progreso</h2>
+  </header>
+  <p class="muted">Cuántas preguntas respondiste en cada actividad. Cuentan las que tienen al menos un intento terminado; los intentos hechos con pistas no cuentan. «Retomar» abre la primera pregunta que todavía no respondiste.</p>
+  <div id="p-lista"></div>
 </section>
 
 <!-- ============ DATOS ============ -->
