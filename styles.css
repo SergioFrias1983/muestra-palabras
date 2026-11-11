@@ -262,3 +262,6 @@ body.pc #s-tipeo.sin-teclado .acciones{padding-top:8px}
 .prog-rell{height:100%;background:var(--pri);border-radius:99px}
 .prog-fila .btn{margin-top:8px}
 .prog-ok{margin:8px 0 0}
+
+.seg.filtro{margin:0 0 12px}
+.seg.filtro button{flex:1;padding:4px 8px}

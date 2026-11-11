@@ -10,7 +10,7 @@
    La etiqueta del menú muestra solo número y fecha (sin descripción del cambio).
    Numeración: el primer cambio de un día sube el entero (21, 22…);
    los siguientes del mismo día agregan subversión (20.1, 20.2…). */
-const VERSION = { num: '26.2', fecha: '11/11/26' };
+const VERSION = { num: '26.3', fecha: '11/11/26' };
 
 /* ---------------- Utilidades ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -1657,10 +1657,27 @@ function actualizarDud(act) {
 }
 
 /* ----- Pantalla "Para repasar" ----- */
-function itemsRepaso() {
+/** Filtro por actividad de «Mi progreso» y «Para repasar»: 'todas' | 'palabras' | 'tipeo' (se recuerda en este dispositivo). */
+const FILTRO = { prog: 'todas', rep: 'todas' };
+try { Object.assign(FILTRO, JSON.parse(localStorage.getItem('mp-filtros') || '{}')); } catch (e) { /* sin almacenamiento: queda el valor por defecto */ }
+function enlazarFiltro(id, clave, redibujar) {
+  const cont = $(id);
+  const pintar = () => cont.querySelectorAll('button').forEach(b => b.classList.toggle('activo', b.dataset.f === FILTRO[clave]));
+  cont.querySelectorAll('button').forEach(b => {
+    b.onclick = () => {
+      FILTRO[clave] = b.dataset.f;
+      try { localStorage.setItem('mp-filtros', JSON.stringify(FILTRO)); } catch (e) { /* idem */ }
+      pintar();
+      redibujar();
+    };
+  });
+  pintar();
+}
+
+function itemsRepaso(tipo) {
   return Object.entries(E.repaso || {})
     .map(([id, r]) => ({ q: E.preguntas.find(x => x.id === id), r }))
-    .filter(x => x.q && !x.r.q)
+    .filter(x => x.q && !x.r.q && (!tipo || tipo === 'todas' || x.r.tipo === tipo))
     .sort((a, b) => (b.r.f || '').localeCompare(a.r.f || ''));
 }
 /* ----- Pantalla «Mi progreso» ----- */
@@ -1680,6 +1697,7 @@ function progresoVuelta(ruta, act) {
 }
 function abrirProgreso() { entrar('progreso'); renderProgreso(); }
 function renderProgreso() {
+  enlazarFiltro('#p-filtro', 'prog', renderProgreso);
   const cont = $('#p-lista');
   cont.innerHTML = '';
   const grupos = new Map();
@@ -1694,6 +1712,7 @@ function renderProgreso() {
     card.append(el('h3', '', ruta.join(' › ')));
     [['palabras', '⏱️ Revelar palabras', iniciarEval, cargarPreguntaEval, '#e-preguntas'],
      ['tipeo', '⌨️ Escribir letra por letra', iniciarTipeo, cargarPreguntaTipeo, '#t-preguntas']].forEach(([act, nombre, iniciar, cargar, panel]) => {
+      if (FILTRO.prog !== 'todas' && FILTRO.prog !== act) return;
       const p = progresoVuelta(ruta, act);
       const { hechas, pend, min } = p;
       const sig = pend[0];
@@ -1719,7 +1738,8 @@ function renderProgreso() {
 }
 function abrirRepaso() { entrar('repaso'); renderRepaso(); }
 function renderRepaso() {
-  const items = itemsRepaso();
+  enlazarFiltro('#r-filtro', 'rep', renderRepaso);
+  const items = itemsRepaso(FILTRO.rep);
   const hoy = ahora().slice(0, 10);
   $('#r-botones').hidden = !items.length;
   const cont = $('#r-lista');
@@ -1754,7 +1774,7 @@ function renderRepaso() {
 }
 /** Arranca el repaso: si se elige una pregunta, empieza por ella y sigue con las demás de la lista. */
 function empezarRepaso(act, primero) {
-  let alc = itemsRepaso().map(x => x.q.id);
+  let alc = itemsRepaso(FILTRO.rep).map(x => x.q.id);
   const i = primero ? alc.indexOf(primero) : -1;
   if (i > 0) alc = alc.slice(i).concat(alc.slice(0, i));
   if (!alc.length) return;
