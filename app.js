@@ -10,7 +10,7 @@
    La etiqueta del menú muestra solo número y fecha (sin descripción del cambio).
    Numeración: el primer cambio de un día sube el entero (21, 22…);
    los siguientes del mismo día agregan subversión (20.1, 20.2…). */
-const VERSION = { num: '27.1', fecha: '12/11/26' };
+const VERSION = { num: '27.2', fecha: '12/11/26' };
 
 /* ---------------- Utilidades ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -1546,12 +1546,15 @@ function quitarRepaso(qid) {
   const r = (E.repaso || {})[qid];
   if (r) E.repaso[qid] = Object.assign({}, r, { q: true, mod: Date.now() });
 }
+/** ¿Está la pregunta en la lista «Para repasar»? Esas se practican solo desde el repaso, no en las vueltas. */
+const enListaRepaso = id => { const r = (E.repaso || {})[id]; return !!(r && !r.q); };
 function proximaRonda(S2) {
   const l = listaRonda(S2);
   const i = l.findIndex(q => q.id === S2.q.id);
+  const libre = !(S2.ronda.alcance);   // fuera del repaso y de las vueltas guiadas, las que están en repaso se saltean
   for (let k = 1; k <= l.length; k++) {
     const q = l[(i + k) % l.length];
-    if (!S2.ronda.hechas.has(q.id)) return q;
+    if (!S2.ronda.hechas.has(q.id) && !(libre && enListaRepaso(q.id))) return q;
   }
   return null;
 }
@@ -1560,7 +1563,7 @@ async function finRonda(act) {
   // Se repiten todas las de la ronda que siguen en «Para repasar» (dudosas o con pistas,
   // de esta ronda o de antes), no solo las marcadas como dudosas en esta ronda.
   const pend = new Set(itemsRepaso().map(x => x.q.id));
-  const orden = listaRonda(S2).filter(q => pend.has(q.id) || S2.ronda.dudosas.has(q.id)).map(q => q.id);
+  const orden = listaRonda(S2).filter(q => S2.ronda.dudosas.has(q.id) || (S2.ronda.alcance && pend.has(q.id))).map(q => q.id);
   const alcanceActual = S2.ronda.alcance;
   if (S2.ronda.vuelta && !S2.ronda.dudosas.size) {
     // Terminó la vuelta de «Mi progreso»
@@ -1684,22 +1687,13 @@ function itemsRepaso(tipo) {
 }
 /* ----- Pantalla «Mi progreso» ----- */
 /** Estudio por vueltas: una vuelta es un recorrido por todas las preguntas de la carpeta. Se calcula repasando en orden
-    cronológico los intentos ya guardados (los hechos con pistas no cuentan): una pregunta suma una vez por vuelta (los
+    cronológico los intentos ya guardados (los hechos con pistas no cuentan; las preguntas que están en «Para repasar» quedan fuera de la vuelta): una pregunta suma una vez por vuelta (los
     reintentos dentro de la misma vuelta no cuentan) y, cuando todas sumaron, se completa la vuelta y empieza otra. */
 function progresoVuelta(ruta, act) {
   const tiempos = (act === 'tipeo' ? E.tiemposTipeo : E.tiempos) || {};
-  const lista = pregs(ruta);
+  const lista = pregs(ruta).filter(q => !enListaRepaso(q.id));   // las que están en repaso se practican desde ahí
   const evs = [];
-  lista.forEach(q => {
-    // si la pregunta está en la lista de repaso, lo hecho fuera del repaso desde que entró ahí no cuenta
-    const rp = E.repaso[q.id], enLista = rp && !rp.q && rp.tipo === act;
-    (tiempos[q.id] || []).forEach(x => {
-      if (x.h > 0) return;
-      const f = String(x.f || '');
-      if (enLista && !x.r && f >= String(rp.f || '')) return;
-      evs.push([f, q.id]);
-    });
-  });
+  lista.forEach(q => (tiempos[q.id] || []).forEach(x => { if (!(x.h > 0)) evs.push([String(x.f || ''), q.id]); }));
   evs.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
   let hechas = new Set(), vueltas = 0, cerro = null;
   for (const [, id] of evs) {
@@ -1722,7 +1716,7 @@ function renderProgreso() {
   });
   if (!grupos.size) { cont.append(el('p', 'muted centro', 'Todavía no hay preguntas.')); return; }
   [...grupos.values()].sort((a, b) => a.join('/').localeCompare(b.join('/'), 'es')).forEach(ruta => {
-    const lista = pregs(ruta);
+    const lista = pregs(ruta).filter(q => !enListaRepaso(q.id));
     const card = el('section', 'panel prog');
     card.append(el('h3', '', ruta.join(' › ')));
     [['palabras', '⏱️ Revelar palabras', iniciarEval, cargarPreguntaEval, '#e-preguntas'],
