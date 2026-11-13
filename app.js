@@ -10,7 +10,7 @@
    La etiqueta del menú muestra solo número y fecha (sin descripción del cambio).
    Numeración: el primer cambio de un día sube el entero (21, 22…);
    los siguientes del mismo día agregan subversión (20.1, 20.2…). */
-const VERSION = { num: '27.2', fecha: '12/11/26' };
+const VERSION = { num: '27.3', fecha: '12/11/26' };
 
 /* ---------------- Utilidades ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -1567,10 +1567,13 @@ async function finRonda(act) {
   const alcanceActual = S2.ronda.alcance;
   if (S2.ronda.vuelta && !S2.ronda.dudosas.size) {
     // Terminó la vuelta de «Mi progreso»
-    const n = progresoVuelta(S2.ruta, act).min;
+    const pv = progresoVuelta(S2.ruta, act), falta = pv.hechas ? pv.pend.length : 0;   // sin hechas = la vuelta se cerró
     S2.ronda = nuevaRonda(null);
-    await modal({
-      titulo: `¡Vuelta ${n} completa! 🎉`, mensaje: 'Respondiste todas las preguntas de esta vuelta.',
+    await modal(falta ? {
+      titulo: 'Vuelta casi completa', mensaje: `Terminaste las preguntas libres. Faltan ${falta} en «Para repasar»: la vuelta se completa cuando las aprendas desde el repaso.`,
+      botones: [{ texto: 'Ver mi progreso', valor: true, clase: 'primary' }]
+    } : {
+      titulo: `¡Vuelta ${pv.min} completa! 🎉`, mensaje: 'Respondiste todas las preguntas de esta vuelta.',
       botones: [{ texto: 'Ver mi progreso', valor: true, clase: 'primary' }]
     });
     await volverMenu();
@@ -1687,13 +1690,22 @@ function itemsRepaso(tipo) {
 }
 /* ----- Pantalla «Mi progreso» ----- */
 /** Estudio por vueltas: una vuelta es un recorrido por todas las preguntas de la carpeta. Se calcula repasando en orden
-    cronológico los intentos ya guardados (los hechos con pistas no cuentan; las preguntas que están en «Para repasar» quedan fuera de la vuelta): una pregunta suma una vez por vuelta (los
+    cronológico los intentos ya guardados (los hechos con pistas no cuentan; las que están en «Para repasar» solo suman si se hacen desde el repaso): una pregunta suma una vez por vuelta (los
     reintentos dentro de la misma vuelta no cuentan) y, cuando todas sumaron, se completa la vuelta y empieza otra. */
 function progresoVuelta(ruta, act) {
   const tiempos = (act === 'tipeo' ? E.tiemposTipeo : E.tiempos) || {};
-  const lista = pregs(ruta).filter(q => !enListaRepaso(q.id));   // las que están en repaso se practican desde ahí
+  const lista = pregs(ruta);
   const evs = [];
-  lista.forEach(q => (tiempos[q.id] || []).forEach(x => { if (!(x.h > 0)) evs.push([String(x.f || ''), q.id]); }));
+  lista.forEach(q => {
+    // si está en «Para repasar», solo suma lo hecho desde el repaso (después de haber entrado a la lista)
+    const rp = (E.repaso || {})[q.id], enLista = rp && !rp.q;
+    (tiempos[q.id] || []).forEach(x => {
+      if (x.h > 0) return;
+      const f = String(x.f || '');
+      if (enLista && !x.r && f >= String(rp.f || '')) return;
+      evs.push([f, q.id]);
+    });
+  });
   evs.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
   let hechas = new Set(), vueltas = 0, cerro = null;
   for (const [, id] of evs) {
@@ -1702,7 +1714,9 @@ function progresoVuelta(ruta, act) {
     hechas.add(id);
     if (hechas.size === lista.length) { vueltas++; hechas = new Set(); cerro = id; }
   }
-  return { lista, min: vueltas, pend: lista.filter(q => !hechas.has(q.id)), hechas: hechas.size };
+  const pend = lista.filter(q => !hechas.has(q.id));
+  // libres: las pendientes que se pueden practicar en la vuelta; el resto está en repaso y se hace desde ahí
+  return { lista, min: vueltas, pend, libres: pend.filter(q => !enListaRepaso(q.id)), hechas: hechas.size };
 }
 function abrirProgreso() { entrar('progreso'); renderProgreso(); }
 function renderProgreso() {
@@ -1716,16 +1730,17 @@ function renderProgreso() {
   });
   if (!grupos.size) { cont.append(el('p', 'muted centro', 'Todavía no hay preguntas.')); return; }
   [...grupos.values()].sort((a, b) => a.join('/').localeCompare(b.join('/'), 'es')).forEach(ruta => {
-    const lista = pregs(ruta).filter(q => !enListaRepaso(q.id));
+    const lista = pregs(ruta);
     const card = el('section', 'panel prog');
     card.append(el('h3', '', ruta.join(' › ')));
     [['palabras', '⏱️ Revelar palabras', iniciarEval, cargarPreguntaEval, '#e-preguntas'],
      ['tipeo', '⌨️ Escribir letra por letra', iniciarTipeo, cargarPreguntaTipeo, '#t-preguntas']].forEach(([act, nombre, iniciar, cargar, panel]) => {
       if (FILTRO.prog !== 'todas' && FILTRO.prog !== act) return;
       const p = progresoVuelta(ruta, act);
-      const { hechas, pend, min } = p;
-      const sig = pend[0];
-      const fila = el('div', 'prog-fila' + (!sig && lista.length ? ' hecha' : ''));
+      const { hechas, pend, libres, min } = p;
+      const sig = libres[0];
+      const enRep = pend.length - libres.length;
+      const fila = el('div', 'prog-fila' + (!pend.length && lista.length ? ' hecha' : ''));
       const cab = el('div', 'prog-cab');
       cab.append(el('span', '', nombre), el('span', 'prog-n', lista.length ? `Vuelta ${min + 1} · ${hechas} / ${lista.length}` : '—'));
       const barra = el('div', 'barra');
@@ -1733,11 +1748,12 @@ function renderProgreso() {
       rell.style.width = (lista.length ? Math.round(100 * hechas / lista.length) : 0) + '%';
       barra.append(rell);
       fila.append(cab, barra);
+      if (enRep) fila.append(el('p', 'muted prog-ok', `${enRep} en «Para repasar»: suman al aprenderlas desde el repaso.`));
       if (sig) {
         if (!hechas && min) fila.append(el('p', 'muted prog-ok', `✓ Vuelta ${min} completa`));
         const txt = hechas ? `Retomar en la ${pad(sig.num, 3)} ›` : (min ? `Empezar la vuelta ${min + 1} ›` : `Empezar en la ${pad(sig.num, 3)} ›`);
         const b = el('button', 'btn small primary', txt);
-        b.onclick = () => iniciar(ruta, pend.map(q => q.id), true);
+        b.onclick = () => iniciar(ruta, libres.map(q => q.id), true);
         fila.append(b);
       }
       card.append(fila);

@@ -1,4 +1,4 @@
-const CACHE = 'muestra-palabras-v27.2';
+const CACHE = 'muestra-palabras-v27.3';
 const ARCHIVOS = ['./', 'index.html', 'styles.css', 'app.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
