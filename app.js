@@ -10,7 +10,7 @@
    La etiqueta del menú muestra solo número y fecha (sin descripción del cambio).
    Numeración: el primer cambio de un día sube el entero (21, 22…);
    los siguientes del mismo día agregan subversión (20.1, 20.2…). */
-const VERSION = { num: '26.3', fecha: '11/11/26' };
+const VERSION = { num: '27', fecha: '12/11/26' };
 
 /* ---------------- Utilidades ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -1681,19 +1681,23 @@ function itemsRepaso(tipo) {
     .sort((a, b) => (b.r.f || '').localeCompare(a.r.f || ''));
 }
 /* ----- Pantalla «Mi progreso» ----- */
-/** Estudio por vueltas: una vuelta es un recorrido por todas las preguntas de la carpeta. Se calcula con los intentos
-    ya guardados: los hechos con pistas no cuentan, y varios intentos de la misma pregunta en un mismo día cuentan uno solo.
-    Vueltas completas = el mínimo de días con intento válido entre las preguntas. */
+/** Estudio por vueltas: una vuelta es un recorrido por todas las preguntas de la carpeta. Se calcula repasando en orden
+    cronológico los intentos ya guardados (los hechos con pistas no cuentan): una pregunta suma una vez por vuelta (los
+    reintentos dentro de la misma vuelta no cuentan) y, cuando todas sumaron, se completa la vuelta y empieza otra. */
 function progresoVuelta(ruta, act) {
   const tiempos = (act === 'tipeo' ? E.tiemposTipeo : E.tiempos) || {};
   const lista = pregs(ruta);
-  const dias = q => new Set((tiempos[q.id] || []).filter(x => !(x.h > 0)).map(x => String(x.f || '').slice(0, 10)));
-  const n = lista.map(q => dias(q).size);
-  const min = n.length ? Math.min(...n) : 0;
-  const pend = lista.filter((q, i) => n[i] === min);
-  const hoy = ahora().slice(0, 10);
-  const todasHoy = lista.length > 0 && lista.every(q => dias(q).has(hoy));
-  return { lista, min, pend, hechas: lista.length - pend.length, todasHoy };
+  const evs = [];
+  lista.forEach(q => (tiempos[q.id] || []).forEach(x => { if (!(x.h > 0)) evs.push([String(x.f || ''), q.id]); }));
+  evs.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+  let hechas = new Set(), vueltas = 0, cerro = null;
+  for (const [, id] of evs) {
+    if (id === cerro) continue;   // reintento de la pregunta que acaba de cerrar la vuelta anterior
+    cerro = null;
+    hechas.add(id);
+    if (hechas.size === lista.length) { vueltas++; hechas = new Set(); cerro = id; }
+  }
+  return { lista, min: vueltas, pend: lista.filter(q => !hechas.has(q.id)), hechas: hechas.size };
 }
 function abrirProgreso() { entrar('progreso'); renderProgreso(); }
 function renderProgreso() {
@@ -1725,8 +1729,8 @@ function renderProgreso() {
       barra.append(rell);
       fila.append(cab, barra);
       if (sig) {
-        if (!hechas && min) fila.append(el('p', 'muted prog-ok', `✓ Vuelta ${min} completa` + (p.todasHoy ? ' hoy. Lo que practiques hoy de nuevo no suma: la vuelta siguiente cuenta desde mañana.' : '')));
-        const txt = hechas ? `Retomar en la ${pad(sig.num, 3)} ›` : (min ? (p.todasHoy ? 'Practicar igual ›' : `Empezar la vuelta ${min + 1} ›`) : `Empezar en la ${pad(sig.num, 3)} ›`);
+        if (!hechas && min) fila.append(el('p', 'muted prog-ok', `✓ Vuelta ${min} completa`));
+        const txt = hechas ? `Retomar en la ${pad(sig.num, 3)} ›` : (min ? `Empezar la vuelta ${min + 1} ›` : `Empezar en la ${pad(sig.num, 3)} ›`);
         const b = el('button', 'btn small primary', txt);
         b.onclick = () => iniciar(ruta, pend.map(q => q.id), true);
         fila.append(b);
