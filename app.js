@@ -10,7 +10,7 @@
    La etiqueta del menú muestra solo número y fecha (sin descripción del cambio).
    Numeración: el primer cambio de un día sube el entero (21, 22…);
    los siguientes del mismo día agregan subversión (20.1, 20.2…). */
-const VERSION = { num: '27', fecha: '12/11/26' };
+const VERSION = { num: '27.1', fecha: '12/11/26' };
 
 /* ---------------- Utilidades ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -772,6 +772,7 @@ async function terminar() {
   const prev = E.tiempos[V.q.id] ? [...E.tiempos[V.q.id]] : [];
   const res = evaluar(prev, ms);
   const reg = { f: ahora(), ms, p: V.n };
+  if (enRepaso(V)) reg.r = 1;   // hecho dentro del repaso
   (E.tiempos[V.q.id] = E.tiempos[V.q.id] || []).push(reg);
   V.ultimoReg = reg;
   setReloj(ms, res.clase);
@@ -1278,6 +1279,7 @@ async function terminarTipeo() {
     : evaluar(prev, ms);
   const reg = { f: ahora(), ms, p: T.total, e: T.errores };
   if (T.pistas) reg.h = T.pistas;
+  if (enRepaso(T)) reg.r = 1;   // hecho dentro del repaso
   (E.tiemposTipeo[T.q.id] = E.tiemposTipeo[T.q.id] || []).push(reg);
   if (T.pistas) { marcarRepaso(T.q.id, 'tipeo', 'pistas'); T.ronda.dudosas.add(T.q.id); }
   T.ultimoReg = reg;
@@ -1688,7 +1690,16 @@ function progresoVuelta(ruta, act) {
   const tiempos = (act === 'tipeo' ? E.tiemposTipeo : E.tiempos) || {};
   const lista = pregs(ruta);
   const evs = [];
-  lista.forEach(q => (tiempos[q.id] || []).forEach(x => { if (!(x.h > 0)) evs.push([String(x.f || ''), q.id]); }));
+  lista.forEach(q => {
+    // si la pregunta está en la lista de repaso, lo hecho fuera del repaso desde que entró ahí no cuenta
+    const rp = E.repaso[q.id], enLista = rp && !rp.q && rp.tipo === act;
+    (tiempos[q.id] || []).forEach(x => {
+      if (x.h > 0) return;
+      const f = String(x.f || '');
+      if (enLista && !x.r && f >= String(rp.f || '')) return;
+      evs.push([f, q.id]);
+    });
+  });
   evs.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
   let hechas = new Set(), vueltas = 0, cerro = null;
   for (const [, id] of evs) {
@@ -1720,7 +1731,7 @@ function renderProgreso() {
       const p = progresoVuelta(ruta, act);
       const { hechas, pend, min } = p;
       const sig = pend[0];
-      const fila = el('div', 'prog-fila');
+      const fila = el('div', 'prog-fila' + (!sig && lista.length ? ' hecha' : ''));
       const cab = el('div', 'prog-cab');
       cab.append(el('span', '', nombre), el('span', 'prog-n', lista.length ? `Vuelta ${min + 1} · ${hechas} / ${lista.length}` : '—'));
       const barra = el('div', 'barra');

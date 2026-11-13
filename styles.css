@@ -265,3 +265,7 @@ body.pc #s-tipeo.sin-teclado .acciones{padding-top:8px}
 
 .seg.filtro{margin:0 0 12px}
 .seg.filtro button{flex:1;padding:4px 8px}
+
+.prog-fila.hecha{opacity:.55}
+.prog-fila.hecha .prog-rell{background:var(--muted)}
+.prog-fila.hecha .prog-ok{color:var(--muted)}
