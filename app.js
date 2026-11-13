@@ -10,7 +10,7 @@
    La etiqueta del menú muestra solo número y fecha (sin descripción del cambio).
    Numeración: el primer cambio de un día sube el entero (21, 22…);
    los siguientes del mismo día agregan subversión (20.1, 20.2…). */
-const VERSION = { num: '27.4', fecha: '12/11/26' };
+const VERSION = { num: '27.5', fecha: '12/11/26' };
 
 /* ---------------- Utilidades ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -1567,12 +1567,15 @@ async function finRonda(act) {
   const alcanceActual = S2.ronda.alcance;
   if (S2.ronda.vuelta && !S2.ronda.dudosas.size) {
     // Terminó la vuelta de «Mi progreso»
-    const pv = progresoVuelta(S2.ruta, act), falta = pv.hechas ? pv.pend.length : 0;   // sin hechas = la vuelta se cerró
+    const pv = progresoVuelta(S2.ruta, act), falta = pv.hechas ? pv.pend.filter(q => enListaRepaso(q.id)) : [];   // sin hechas = la vuelta se cerró
     S2.ronda = nuevaRonda(null);
-    await modal(falta ? {
-      titulo: 'Vuelta casi completa', mensaje: `Terminaste las preguntas libres. Faltan ${falta} en «Para repasar»: la vuelta se completa cuando las aprendas desde el repaso.`,
-      botones: [{ texto: 'Ver mi progreso', valor: true, clase: 'primary' }]
-    } : {
+    if (falta.length) {
+      // Quedan pendientes que están en repaso: se sigue directo desde el repaso
+      aviso(`Siguen ${falta.length} del repaso 🔁`);
+      (act === 'tipeo' ? iniciarTipeo : iniciarEval)(null, falta.map(q => q.id));
+      return;
+    }
+    await modal({
       titulo: `¡Vuelta ${pv.min} completa! 🎉`, mensaje: 'Respondiste todas las preguntas de esta vuelta.',
       botones: [{ texto: 'Ver mi progreso', valor: true, clase: 'primary' }]
     });
@@ -1749,18 +1752,13 @@ function renderProgreso() {
       barra.append(rell);
       fila.append(cab, barra);
       if (enRep) fila.append(el('p', 'muted prog-ok', `${enRep} en «Para repasar» (suman al aprenderlas).`));
-      if (sig) {
+      if (sig || enRep) {
         if (!hechas && min) fila.append(el('p', 'muted prog-ok', `✓ Vuelta ${min} completa`));
-        const txt = hechas ? `Retomar en la ${pad(sig.num, 3)} ›` : (min ? `Empezar la vuelta ${min + 1} ›` : `Empezar en la ${pad(sig.num, 3)} ›`);
+        const rep = !sig;   // solo quedan las que están en repaso: se termina desde ahí
+        const txt = rep ? `Terminar en repaso (${enRep}) ›` : hechas ? `Retomar en la ${pad(sig.num, 3)} ›` : (min ? `Empezar la vuelta ${min + 1} ›` : `Empezar en la ${pad(sig.num, 3)} ›`);
         const b = el('button', 'btn small primary', txt);
-        b.onclick = () => iniciar(ruta, libres.map(q => q.id), true);
+        b.onclick = () => rep ? iniciar(null, pend.map(q => q.id)) : iniciar(ruta, libres.map(q => q.id), true);
         fila.append(b);
-      }
-      if (enRep) {
-        // las pendientes que están en repaso se practican desde el repaso (arranca por ellas)
-        const rb = el('button', 'btn small' + (sig ? '' : ' primary'), `Repasar ${enRep === 1 ? 'la pendiente' : 'las ' + enRep} ›`);
-        rb.onclick = () => iniciar(null, pend.filter(q => enListaRepaso(q.id)).map(q => q.id));
-        fila.append(rb);
       }
       card.append(fila);
     });
