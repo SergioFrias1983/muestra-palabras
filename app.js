@@ -10,7 +10,7 @@
    La etiqueta del menú muestra solo número y fecha (sin descripción del cambio).
    Numeración: el primer cambio de un día sube el entero (21, 22…);
    los siguientes del mismo día agregan subversión (20.1, 20.2…). */
-const VERSION = { num: '27.3', fecha: '12/11/26' };
+const VERSION = { num: '27.4', fecha: '12/11/26' };
 
 /* ---------------- Utilidades ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -1748,13 +1748,19 @@ function renderProgreso() {
       rell.style.width = (lista.length ? Math.round(100 * hechas / lista.length) : 0) + '%';
       barra.append(rell);
       fila.append(cab, barra);
-      if (enRep) fila.append(el('p', 'muted prog-ok', `${enRep} en «Para repasar»: suman al aprenderlas desde el repaso.`));
+      if (enRep) fila.append(el('p', 'muted prog-ok', `${enRep} en «Para repasar» (suman al aprenderlas).`));
       if (sig) {
         if (!hechas && min) fila.append(el('p', 'muted prog-ok', `✓ Vuelta ${min} completa`));
         const txt = hechas ? `Retomar en la ${pad(sig.num, 3)} ›` : (min ? `Empezar la vuelta ${min + 1} ›` : `Empezar en la ${pad(sig.num, 3)} ›`);
         const b = el('button', 'btn small primary', txt);
         b.onclick = () => iniciar(ruta, libres.map(q => q.id), true);
         fila.append(b);
+      }
+      if (enRep) {
+        // las pendientes que están en repaso se practican desde el repaso (arranca por ellas)
+        const rb = el('button', 'btn small' + (sig ? '' : ' primary'), `Repasar ${enRep === 1 ? 'la pendiente' : 'las ' + enRep} ›`);
+        rb.onclick = () => iniciar(null, pend.filter(q => enListaRepaso(q.id)).map(q => q.id));
+        fila.append(rb);
       }
       card.append(fila);
     });
