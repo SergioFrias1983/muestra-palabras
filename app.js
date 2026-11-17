@@ -10,7 +10,7 @@
    La etiqueta del menú muestra solo número y fecha (sin descripción del cambio).
    Numeración: el primer cambio de un día sube el entero (21, 22…);
    los siguientes del mismo día agregan subversión (20.1, 20.2…). */
-const VERSION = { num: '28', fecha: '16/11/26' };
+const VERSION = { num: '28.1', fecha: '17/11/26' };
 
 /* ---------------- Utilidades ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -1567,7 +1567,7 @@ async function finRonda(act) {
   const alcanceActual = S2.ronda.alcance;
   if (S2.ronda.vuelta && !S2.ronda.dudosas.size) {
     // Terminó la vuelta de «Mi progreso»
-    const pv = progresoVuelta(S2.ruta, act), falta = pv.hechas ? pv.pend.filter(q => enListaRepaso(q.id)) : [];   // sin hechas = la vuelta se cerró
+    const pv = progresoVuelta(S2.ruta, act), falta = pv.hechas ? pv.rep : [];   // sin hechas = la vuelta se cerró
     S2.ronda = nuevaRonda(null);
     if (falta.length) {
       // Quedan pendientes que están en repaso: se sigue directo desde el repaso
@@ -1719,8 +1719,10 @@ function progresoVuelta(ruta, act) {
     if (hechas.size === lista.length) { vueltas++; hechas = new Set(); cerro = id; }
   }
   const pend = lista.filter(q => !hechas.has(q.id));
-  // libres: las pendientes que se pueden practicar en la vuelta; el resto está en repaso y se hace desde ahí
-  return { lista, min: vueltas, pend, libres: pend.filter(q => !enListaRepaso(q.id)), hechas: hechas.size };
+  // libres: las pendientes que se pueden practicar en la vuelta; rep: todas las que están en repaso (se terminan desde ahí)
+  const rep = lista.filter(q => enListaRepaso(q.id));
+  return { lista, min: vueltas, pend, libres: pend.filter(q => !enListaRepaso(q.id)), rep, hechas: hechas.size,
+    hechasVis: lista.filter(q => hechas.has(q.id) && !enListaRepaso(q.id)).length };
 }
 function abrirProgreso() { entrar('progreso'); renderProgreso(); }
 function renderProgreso() {
@@ -1741,15 +1743,15 @@ function renderProgreso() {
      ['tipeo', '⌨️ Escribir letra por letra', iniciarTipeo, cargarPreguntaTipeo, '#t-preguntas']].forEach(([act, nombre, iniciar, cargar, panel]) => {
       if (FILTRO.prog !== 'todas' && FILTRO.prog !== act) return;
       const p = progresoVuelta(ruta, act);
-      const { hechas, pend, libres, min } = p;
+      const { hechas, pend, libres, min, rep: enListaRep } = p;
       const sig = libres[0];
-      const enRep = pend.length - libres.length;
-      const fila = el('div', 'prog-fila' + (!pend.length && lista.length ? ' hecha' : ''));
+      const enRep = enListaRep.length;
+      const fila = el('div', 'prog-fila' + (!pend.length && !enRep && lista.length ? ' hecha' : ''));
       const cab = el('div', 'prog-cab');
-      cab.append(el('span', '', nombre), el('span', 'prog-n', lista.length ? `Vuelta ${min + 1} · ${hechas} / ${lista.length}` : '—'));
+      cab.append(el('span', '', nombre), el('span', 'prog-n', lista.length ? `Vuelta ${min + 1} · ${p.hechasVis} / ${lista.length}` : '—'));
       const barra = el('div', 'barra');
       const rell = el('div', 'prog-rell');
-      rell.style.width = (lista.length ? Math.round(100 * hechas / lista.length) : 0) + '%';
+      rell.style.width = (lista.length ? Math.round(100 * p.hechasVis / lista.length) : 0) + '%';
       barra.append(rell);
       fila.append(cab, barra);
       if (enRep) fila.append(el('p', 'muted prog-ok', `${enRep} en «Para repasar» (suman al aprenderlas).`));
@@ -1758,7 +1760,7 @@ function renderProgreso() {
         const rep = !sig;   // solo quedan las que están en repaso: se termina desde ahí
         const txt = rep ? `Terminar en repaso (${enRep}) ›` : hechas ? `Retomar en la ${pad(sig.num, 3)} ›` : (min ? `Empezar la vuelta ${min + 1} ›` : `Empezar en la ${pad(sig.num, 3)} ›`);
         const b = el('button', 'btn small primary', txt);
-        b.onclick = () => rep ? iniciar(null, pend.map(q => q.id)) : iniciar(ruta, libres.map(q => q.id), true);
+        b.onclick = () => rep ? iniciar(null, enListaRep.map(q => q.id)) : iniciar(ruta, libres.map(q => q.id), true);
         fila.append(b);
       }
       card.append(fila);
