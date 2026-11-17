@@ -10,7 +10,7 @@
    La etiqueta del menú muestra solo número y fecha (sin descripción del cambio).
    Numeración: el primer cambio de un día sube el entero (21, 22…);
    los siguientes del mismo día agregan subversión (20.1, 20.2…). */
-const VERSION = { num: '28.1', fecha: '17/11/26' };
+const VERSION = { num: '28.2', fecha: '17/11/26' };
 
 /* ---------------- Utilidades ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -1583,11 +1583,11 @@ async function finRonda(act) {
     abrirProgreso();
     return;
   }
-  if (!orden.length && alcanceActual && !pend.size) {
+  if (!orden.length && alcanceActual) {   // terminó las de este repaso (aunque queden otras en otras carpetas)
     // Terminó el repaso: aviso y vuelta a la pantalla de inicio
     S2.ronda = nuevaRonda(alcanceActual);
     await modal({
-      titulo: '¡Repaso completo! 🎉', mensaje: 'Ya no quedan preguntas para repasar.',
+      titulo: '¡Repaso completo! 🎉', mensaje: pend.size ? 'Terminaste las preguntas de este repaso.' : 'Ya no quedan preguntas para repasar.',
       botones: [{ texto: 'Ver mi progreso', valor: true, clase: 'primary' }]
     });
     await volverMenu();
