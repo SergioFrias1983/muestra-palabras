@@ -10,7 +10,7 @@
    La etiqueta del menú muestra solo número y fecha (sin descripción del cambio).
    Numeración: el primer cambio de un día sube el entero (21, 22…);
    los siguientes del mismo día agregan subversión (20.1, 20.2…). */
-const VERSION = { num: '29.1', fecha: '18/11/26' };
+const VERSION = { num: '29.2', fecha: '18/11/26' };
 
 /* ---------------- Utilidades ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -883,7 +883,8 @@ function renderHistorial(cfg) {
   cont.innerHTML = '';
   $('#' + cfg.p + '-h-ultimos').className = S2.vistaHist === 'ultimos' ? 'activo' : '';
   $('#' + cfg.p + '-h-mejores').className = S2.vistaHist === 'mejores' ? 'activo' : '';
-  const t = S2.q ? (cfg.tiempos()[S2.q.id] || []) : [];
+  // en orden cronológico por fecha (los intentos bajados de la hoja pueden haber quedado al final de la lista)
+  const t = S2.q ? [...(cfg.tiempos()[S2.q.id] || [])].sort((a, b) => (String(a.f || '') < String(b.f || '') ? -1 : String(a.f || '') > String(b.f || '') ? 1 : 0)) : [];
   if (!t.length) {
     cont.append(el('p', 'muted centro', S2.q ? 'Todavía no hay tiempos para esta pregunta.' : '—'));
     return;
@@ -2068,6 +2069,7 @@ async function sincronizar() {
       if (t.e !== '' && t.e != null) reg.e = Number(t.e);
       if (t.h !== '' && t.h != null && Number(t.h) > 0) reg.h = Number(t.h);
       lista.push(reg);
+      lista.sort((a, b) => (String(a.f || '') < String(b.f || '') ? -1 : String(a.f || '') > String(b.f || '') ? 1 : 0));
       bajados++;
     });
 
