@@ -10,7 +10,7 @@
    La etiqueta del menú muestra solo número y fecha (sin descripción del cambio).
    Numeración: el primer cambio de un día sube el entero (21, 22…);
    los siguientes del mismo día agregan subversión (20.1, 20.2…). */
-const VERSION = { num: '28.2', fecha: '17/11/26' };
+const VERSION = { num: '29', fecha: '18/11/26' };
 
 /* ---------------- Utilidades ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -1724,6 +1724,30 @@ function progresoVuelta(ruta, act) {
   return { lista, min: vueltas, pend, libres: pend.filter(q => !enListaRepaso(q.id)), rep, hechas: hechas.size,
     hechasVis: lista.filter(q => hechas.has(q.id) && !enListaRepaso(q.id)).length };
 }
+/** Última práctica válida (sin pistas) de la actividad y si hoy ya se respondieron todas las preguntas. La fecha es la del reloj del dispositivo. */
+function estadoHoy(ruta, act) {
+  const tiempos = (act === 'tipeo' ? E.tiemposTipeo : E.tiempos) || {};
+  const lista = pregs(ruta), hoy = ahora().slice(0, 10);
+  let ultima = '';
+  const hechasHoy = new Set();
+  lista.forEach(q => (tiempos[q.id] || []).forEach(x => {
+    if (x.h > 0) return;
+    const f = String(x.f || '');
+    if (f > ultima) ultima = f;
+    if (f.slice(0, 10) === hoy) hechasHoy.add(q.id);
+  }));
+  const hoyOk = lista.length > 0 && lista.every(q => hechasHoy.has(q.id)) && !lista.some(q => enListaRepaso(q.id));
+  return { ultima, esHoy: ultima.slice(0, 10) === hoy, completoHoy: hoyOk };
+}
+function textoUltima(f) {
+  if (!f) return 'Todavía sin práctica';
+  const d = new Date(); d.setDate(d.getDate() - 1);
+  const ayer = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const dia = f.slice(0, 10), hora = f.slice(11, 16);
+  if (dia === ahora().slice(0, 10)) return `Última práctica: hoy ${hora}`;
+  if (dia === ayer) return `Última práctica: ayer ${hora}`;
+  return `Última práctica: ${fechaCorta(f)}`;
+}
 function abrirProgreso() { entrar('progreso'); renderProgreso(); }
 function renderProgreso() {
   enlazarFiltro('#p-filtro', 'prog', renderProgreso);
@@ -1754,6 +1778,9 @@ function renderProgreso() {
       rell.style.width = (lista.length ? Math.round(100 * p.hechasVis / lista.length) : 0) + '%';
       barra.append(rell);
       fila.append(cab, barra);
+      const hoyE = estadoHoy(ruta, act);
+      if (hoyE.completoHoy) fila.append(el('p', 'prog-hoy', '✓ El repaso de hoy ya fue realizado'));
+      else fila.append(el('p', 'muted prog-ult' + (hoyE.esHoy ? ' es-hoy' : ''), textoUltima(hoyE.ultima)));
       if (enRep) fila.append(el('p', 'muted prog-ok', `${enRep} en «Para repasar» (suman al aprenderlas).`));
       if (sig || enRep) {
         if (!hechas && min) fila.append(el('p', 'muted prog-ok', `✓ Vuelta ${min} completa`));

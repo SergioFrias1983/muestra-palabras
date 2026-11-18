@@ -270,3 +270,8 @@ body.pc #s-tipeo.sin-teclado .acciones{padding-top:8px}
 .prog-fila.hecha .prog-rell{background:var(--muted)}
 .prog-fila.hecha .prog-ok{color:var(--muted)}
 .prog-fila .btn+.btn{margin-left:8px}
+
+.prog-ult{margin:6px 0 0;font-size:.85rem}
+.prog-ult.es-hoy{color:var(--pri)}
+.prog-hoy{margin:6px 0 0;font-size:.9rem;font-weight:600;color:var(--pri)}
+.prog-fila.hecha .prog-hoy,.prog-fila.hecha .prog-ult.es-hoy{color:var(--muted)}
