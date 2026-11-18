@@ -10,7 +10,7 @@
    La etiqueta del menú muestra solo número y fecha (sin descripción del cambio).
    Numeración: el primer cambio de un día sube el entero (21, 22…);
    los siguientes del mismo día agregan subversión (20.1, 20.2…). */
-const VERSION = { num: '29', fecha: '18/11/26' };
+const VERSION = { num: '29.1', fecha: '18/11/26' };
 
 /* ---------------- Utilidades ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -412,7 +412,7 @@ window.addEventListener('popstate', async () => {
 function refrescarMenu() {
   refrescarNube();
   const nRep = itemsRepaso().length;
-  $('#m-repaso').textContent = nRep ? `Para repasar (${nRep})` : 'Para repasar';
+  $('#m-repaso').textContent = 'Para repasar';
   const nAct = new Set(E.preguntas.map(q => q.ruta.join('/'))).size;
   $('#m-resumen').textContent = E.preguntas.length
     ? `${E.preguntas.length} pregunta${E.preguntas.length === 1 ? '' : 's'} en ${nAct} actividad${nAct === 1 ? '' : 'es'}`
