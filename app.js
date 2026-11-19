@@ -10,7 +10,7 @@
    La etiqueta del menú muestra solo número y fecha (sin descripción del cambio).
    Numeración: el primer cambio de un día sube el entero (21, 22…);
    los siguientes del mismo día agregan subversión (20.1, 20.2…). */
-const VERSION = { num: '29.2', fecha: '18/11/26' };
+const VERSION = { num: '30', fecha: '19/11/26' };
 
 /* ---------------- Utilidades ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -585,6 +585,7 @@ function actualizarCuenta() {
     ? 'Elegí Área, Año, Materia y Actividad.'
     : n ? `Esta actividad tiene ${n} pregunta${n === 1 ? '' : 's'}.` : 'Esta actividad todavía no tiene preguntas.';
   $('#sel-continuar').disabled = n === 0;
+  $('#sel-azar').disabled = n === 0;
 }
 
 /* =====================================================================
@@ -599,9 +600,9 @@ const V = {
   vistaHist: 'ultimos'  // 'ultimos' | 'mejores'
 };
 
-function iniciarEval(ruta, alcance, vuelta) {
+function iniciarEval(ruta, alcance, vuelta, azar) {
   V.ruta = ruta;
-  V.ronda = nuevaRonda(alcance, vuelta);
+  V.ronda = nuevaRonda(alcance, vuelta, azar);
   entrar('eval');
   pintarRutaRonda('#e-ruta', ruta, alcance);
   V.q = null;
@@ -1019,9 +1020,9 @@ function pintarRuta(sel, ruta) {
 }
 
 /* ----- Pantalla ----- */
-function iniciarTipeo(ruta, alcance, vuelta) {
+function iniciarTipeo(ruta, alcance, vuelta, azar) {
   T.ruta = ruta;
-  T.ronda = nuevaRonda(alcance, vuelta);
+  T.ronda = nuevaRonda(alcance, vuelta, azar);
   entrar('tipeo');
   pintarRutaRonda('#t-ruta', ruta, alcance);
   construirTeclado();
@@ -1517,11 +1518,18 @@ async function importarTxt(files) {
    - Las Dudosas (y las hechas con pistas) quedan en E.repaso y se repiten al final de la ronda.
    ===================================================================== */
 /** vuelta = true: recorrido de estudio por «Mi progreso» (solo las pendientes de la vuelta); no es el modo repaso. */
-const nuevaRonda = (alcance, vuelta) => ({ alcance: alcance || null, vuelta: !!vuelta, hechas: new Set(), dudosas: new Set() });
+const nuevaRonda = (alcance, vuelta, azar) => ({ alcance: alcance || null, vuelta: !!vuelta, azar: !!azar, hechas: new Set(), dudosas: new Set() });
 const CARGAR = { palabras: q => { cargarPreguntaEval(q); $('#e-preguntas').open = false; }, tipeo: q => { cargarPreguntaTipeo(q); $('#t-preguntas').open = false; } };
 
 /** ¿Se está repasando (lista «Para repasar» o repitiendo dudosas)? */
-function enRepaso(S2) { return !!(S2.ronda && S2.ronda.alcance && !S2.ronda.vuelta); }
+function enRepaso(S2) { return !!(S2.ronda && S2.ronda.alcance && !S2.ronda.vuelta && !S2.ronda.azar); }
+/** Orden al azar sin repetir: se arma la fila mezclada y cada pregunta entra una sola vez (Fisher–Yates). */
+function mezclar(ids) {
+  const fila = [], vistos = new Set();
+  ids.forEach(id => { if (!vistos.has(id)) { vistos.add(id); fila.push(id); } });
+  for (let i = fila.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [fila[i], fila[j]] = [fila[j], fila[i]]; }
+  return fila;
+}
 
 function listaRonda(S2) {
   if (S2.ronda && S2.ronda.alcance) return S2.ronda.alcance.map(id => E.preguntas.find(q => q.id === id)).filter(Boolean);
@@ -1566,6 +1574,15 @@ async function finRonda(act) {
   const pend = new Set(itemsRepaso().map(x => x.q.id));
   const orden = listaRonda(S2).filter(q => S2.ronda.dudosas.has(q.id) || (S2.ronda.alcance && pend.has(q.id))).map(q => q.id);
   const alcanceActual = S2.ronda.alcance;
+  if (S2.ronda.azar) {
+    // Terminó la ronda al azar: otra mezcla nueva o volver al inicio
+    const ruta = S2.ruta;
+    S2.ronda = nuevaRonda(null);
+    const otra = await confirmar('¡Ronda al azar completa! 🎉', 'Respondiste todas las preguntas, cada una una sola vez.', 'Otra ronda al azar', 'primary', 'Terminar');
+    if (otra) (act === 'tipeo' ? iniciarTipeo : iniciarEval)(ruta, mezclar(pregs(ruta).map(q => q.id)), false, true);
+    else await volverMenu();
+    return;
+  }
   if (S2.ronda.vuelta && !S2.ronda.dudosas.size) {
     // Terminó la vuelta de «Mi progreso»
     const pv = progresoVuelta(S2.ruta, act), falta = pv.hechas ? pv.rep : [];   // sin hechas = la vuelta se cerró
@@ -1875,6 +1892,10 @@ function enlazar() {
 
   // seleccionar
   $('#sel-volver').onclick = () => entrar('act');
+  $('#sel-azar').onclick = () => {
+    const ruta = S.sel.ruta();
+    if (ruta && pregs(ruta).length) (MODO === 'tipeo' ? iniciarTipeo : iniciarEval)(ruta, mezclar(pregs(ruta).map(q => q.id)), false, true);
+  };
   $('#sel-continuar').onclick = () => {
     const ruta = S.sel.ruta();
     if (ruta && pregs(ruta).length) (MODO === 'tipeo' ? iniciarTipeo : iniciarEval)(ruta);
