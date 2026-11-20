@@ -21,6 +21,7 @@
   <p class="muted">Estudiá definiciones contra el reloj, revelándolas palabra por palabra o escribiéndolas letra por letra.</p>
   <button class="btn big" id="m-crear">Crear preguntas</button>
   <button class="btn big primary" id="m-evaluar">Evaluar lo aprendido</button>
+  <button class="btn big" id="m-hoy">Toca hoy</button>
   <button class="btn big" id="m-repaso">Para repasar</button>
   <button class="btn big" id="m-progreso">Mi progreso</button>
   <button class="btn big" id="m-datos">Copia de seguridad e importar</button>
@@ -131,7 +132,7 @@
 
   <div class="acciones">
     <div class="row calif" id="e-calif" hidden>
-      <button class="btn huge success" id="e-apr">Continuar ›</button>
+      <button class="btn huge success" id="e-apr">Correcta ›</button>
       <button class="btn small dudosa" id="e-dud" title="Agregar esta pregunta a «Para repasar»">☆ Para repasar</button>
     </div>
     <div class="row calif calif3" id="e-rep" hidden>
@@ -196,7 +197,7 @@
     <p class="ayuda-pc solo-pc" id="t-ayuda">Escribí con tu teclado · Enter = pista · Esc cancela el intento</p>
     <div id="t-teclado" class="teclado apagado"></div>
     <div class="row calif" id="t-calif" hidden>
-      <button class="btn huge success" id="t-apr">Continuar ›</button>
+      <button class="btn huge success" id="t-apr">Correcta ›</button>
       <button class="btn small dudosa" id="t-dud" title="Agregar esta pregunta a «Para repasar»">☆ Para repasar</button>
     </div>
     <div class="row calif calif3" id="t-rep" hidden>
@@ -229,6 +230,21 @@
     <button class="btn grow" id="r-tip">⌨️ Repasar escribiendo</button>
   </div>
   <div id="r-lista" class="lista"></div>
+</section>
+
+<!-- ============ TOCA HOY (repetición espaciada) ============ -->
+<section id="s-hoy" class="screen" hidden>
+  <header class="bar">
+    <button class="btn small" id="h-volver">‹ Menú</button>
+    <h2>Toca hoy</h2>
+  </header>
+  <p class="muted">Cada pregunta que marcás como <b>Correcta</b> entra en un calendario: se repasa a los 1, 3, 6, 12, 24, 48, 96, 192, 384 y 768 días desde la primera vez. Una respuesta <b>Correcta</b> cierra el repaso; si fallás, volvés a intentar sin reiniciar nada. Con <b>☆ Para repasar</b> o con pistas, la pregunta vuelve a aparecer mañana (el calendario no se mueve).</p>
+  <p id="h-resumen" class="muted"></p>
+  <div id="h-botones" class="row">
+    <button class="btn grow" id="h-pal">⏱️ Repasar revelando</button>
+    <button class="btn grow" id="h-tip">⌨️ Repasar escribiendo</button>
+  </div>
+  <div id="h-lista" class="lista"></div>
 </section>
 
 <!-- ============ MI PROGRESO ============ -->

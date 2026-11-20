@@ -10,7 +10,7 @@
    La etiqueta del menú muestra solo número y fecha (sin descripción del cambio).
    Numeración: el primer cambio de un día sube el entero (21, 22…);
    los siguientes del mismo día agregan subversión (20.1, 20.2…). */
-const VERSION = { num: '30', fecha: '19/11/26' };
+const VERSION = { num: '31', fecha: '20/11/26' };
 
 /* ---------------- Utilidades ---------------- */
 const $ = (s, r = document) => r.querySelector(s);
@@ -252,6 +252,7 @@ async function eliminarCarpeta(pre) {
   }
   const ids = new Set(qs.map(q => q.id));
   E.preguntas = E.preguntas.filter(q => !ids.has(q.id));
+  ids.forEach(id => { if (E.espaciado) delete E.espaciado[id]; });
   if (E.nube && E.nube.url) ids.forEach(id => E.nube.borrados.push(id));
   if (borrarHist) ids.forEach(id => { delete E.tiempos[id]; delete E.tiemposTipeo[id]; });
   delete nodoEn(pre.slice(0, -1))[nombre];
@@ -356,7 +357,7 @@ function crearSelector(cont, alCambiar, gestion = false) {
 }
 
 /* ---------------- Navegación ---------------- */
-const PANTALLAS = ['menu', 'act', 'crear', 'sel', 'eval', 'tipeo', 'datos', 'repaso', 'progreso'];
+const PANTALLAS = ['menu', 'act', 'crear', 'sel', 'eval', 'tipeo', 'datos', 'repaso', 'progreso', 'hoy'];
 let actual = 'menu';
 
 function mostrar(n) {
@@ -551,6 +552,7 @@ async function eliminarPregunta() {
     });
   }
   E.preguntas = E.preguntas.filter(x => x.id !== q.id);
+  if (E.espaciado) delete E.espaciado[q.id];
   if (E.nube && E.nube.url) E.nube.borrados.push(q.id);
   if (borrarHist) { delete E.tiempos[q.id]; delete E.tiemposTipeo[q.id]; }
   await guardarEstado();
@@ -600,11 +602,11 @@ const V = {
   vistaHist: 'ultimos'  // 'ultimos' | 'mejores'
 };
 
-function iniciarEval(ruta, alcance, vuelta, azar) {
+function iniciarEval(ruta, alcance, vuelta, azar, esp) {
   V.ruta = ruta;
-  V.ronda = nuevaRonda(alcance, vuelta, azar);
+  V.ronda = nuevaRonda(alcance, vuelta, azar, esp);
   entrar('eval');
-  pintarRutaRonda('#e-ruta', ruta, alcance);
+  pintarRutaRonda('#e-ruta', ruta, alcance, esp ? 'Toca hoy' : '');
   V.q = null;
   V.estado = 'sinPregunta';
   renderListaEval();
@@ -1020,11 +1022,11 @@ function pintarRuta(sel, ruta) {
 }
 
 /* ----- Pantalla ----- */
-function iniciarTipeo(ruta, alcance, vuelta, azar) {
+function iniciarTipeo(ruta, alcance, vuelta, azar, esp) {
   T.ruta = ruta;
-  T.ronda = nuevaRonda(alcance, vuelta, azar);
+  T.ronda = nuevaRonda(alcance, vuelta, azar, esp);
   entrar('tipeo');
-  pintarRutaRonda('#t-ruta', ruta, alcance);
+  pintarRutaRonda('#t-ruta', ruta, alcance, esp ? 'Toca hoy' : '');
   construirTeclado();
   actualizarSonido();
   detenerT();
@@ -1403,7 +1405,7 @@ function descargar(blob, nombre) {
 }
 
 function exportarCopia() {
-  const datos = { app: 'muestra-palabras', v: 1, exportado: ahora(), arbol: E.arbol, preguntas: E.preguntas, tiempos: E.tiempos, tiemposTipeo: E.tiemposTipeo, repaso: E.repaso };
+  const datos = { app: 'muestra-palabras', v: 1, exportado: ahora(), arbol: E.arbol, preguntas: E.preguntas, tiempos: E.tiempos, tiemposTipeo: E.tiemposTipeo, repaso: E.repaso, espaciado: E.espaciado };
   const d = new Date();
   const nombre = `MuestraPalabras-copia-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}.json`;
   descargar(new Blob([JSON.stringify(datos, null, 1)], { type: 'application/json' }), nombre);
@@ -1436,6 +1438,8 @@ async function restaurarCopia(file) {
     fusionar(E.tiemposTipeo, datos.tiemposTipeo);
     E.repaso = E.repaso || {};
     Object.entries(datos.repaso || {}).forEach(([id, r]) => { if (r && (!E.repaso[id] || (r.mod || 0) > (E.repaso[id].mod || 0))) E.repaso[id] = r; });
+    E.espaciado = E.espaciado || {};
+    Object.entries(datos.espaciado || {}).forEach(([id, r]) => { if (r && (!E.espaciado[id] || (r.mod || 0) > (E.espaciado[id].mod || 0))) E.espaciado[id] = r; });
     await guardarEstado();
     D.sel.refrescar(E.ultima);
     est.textContent = `Restauradas ${nuevas.length} preguntas y ${tiemposAgregados} tiempos.`;
@@ -1518,11 +1522,11 @@ async function importarTxt(files) {
    - Las Dudosas (y las hechas con pistas) quedan en E.repaso y se repiten al final de la ronda.
    ===================================================================== */
 /** vuelta = true: recorrido de estudio por «Mi progreso» (solo las pendientes de la vuelta); no es el modo repaso. */
-const nuevaRonda = (alcance, vuelta, azar) => ({ alcance: alcance || null, vuelta: !!vuelta, azar: !!azar, hechas: new Set(), dudosas: new Set() });
+const nuevaRonda = (alcance, vuelta, azar, esp) => ({ alcance: alcance || null, vuelta: !!vuelta, azar: !!azar, esp: !!esp, hechas: new Set(), dudosas: new Set() });
 const CARGAR = { palabras: q => { cargarPreguntaEval(q); $('#e-preguntas').open = false; }, tipeo: q => { cargarPreguntaTipeo(q); $('#t-preguntas').open = false; } };
 
 /** ¿Se está repasando (lista «Para repasar» o repitiendo dudosas)? */
-function enRepaso(S2) { return !!(S2.ronda && S2.ronda.alcance && !S2.ronda.vuelta && !S2.ronda.azar); }
+function enRepaso(S2) { return !!(S2.ronda && S2.ronda.alcance && !S2.ronda.vuelta && !S2.ronda.azar && !S2.ronda.esp); }
 /** Orden al azar sin repetir: se arma la fila mezclada y cada pregunta entra una sola vez (Fisher–Yates). */
 function mezclar(ids) {
   const fila = [], vistos = new Set();
@@ -1540,15 +1544,18 @@ function textoRonda(S2) {
   if (!r || !r.hechas.size) return '';
   return ` · Ronda: ${r.hechas.size} hecha${r.hechas.size === 1 ? '' : 's'}` + (r.dudosas.size ? `, ${r.dudosas.size} dudosa${r.dudosas.size === 1 ? '' : 's'}` : '');
 }
-function pintarRutaRonda(sel, ruta, alcance) {
+function pintarRutaRonda(sel, ruta, alcance, etiqueta) {
   if (!alcance || ruta) return pintarRuta(sel, ruta);
   const c = $(sel);
   c.textContent = '';
-  c.append(el('span', 'tr tr3', 'Para repasar'));
+  c.append(el('span', 'tr tr3', etiqueta || 'Para repasar'));
 }
 function marcarRepaso(qid, tipo, motivo) {
   E.repaso = E.repaso || {};
   E.repaso[qid] = { tipo, motivo, f: ahora(), mod: Date.now() };
+  // si la pregunta ya está en el calendario, un repaso extra para mañana (sin mover el calendario)
+  const e = (E.espaciado || {})[qid];
+  if (e && (motivo === 'dudosa' || motivo === 'pistas')) { e.extra = sumarDias(hoyStr(), 1); e.mod = Date.now(); }
 }
 /** Quita de la lista dejando una marca (así la baja también llega a los otros dispositivos). */
 function quitarRepaso(qid) {
@@ -1574,6 +1581,22 @@ async function finRonda(act) {
   const pend = new Set(itemsRepaso().map(x => x.q.id));
   const orden = listaRonda(S2).filter(q => S2.ronda.dudosas.has(q.id) || (S2.ronda.alcance && pend.has(q.id))).map(q => q.id);
   const alcanceActual = S2.ronda.alcance;
+  if (S2.ronda.esp) {
+    // Terminó la ronda de «Toca hoy»: si algo sigue pendiente (no se marcó «Correcta») se ofrece seguir
+    const ini = act === 'tipeo' ? iniciarTipeo : iniciarEval;
+    const ids = new Set(alcanceActual);
+    const quedan = itemsHoy().filter(x => ids.has(x.q.id)).map(x => x.q.id);
+    S2.ronda = nuevaRonda(null);
+    if (quedan.length) {
+      const seguir = await confirmar('Quedan pendientes', `${quedan.length === 1 ? 'Queda 1 pregunta' : `Quedan ${quedan.length} preguntas`} sin marcar como correcta. ¿Seguís ahora?`, 'Seguir', 'primary', 'Después');
+      if (seguir) { ini(null, quedan, false, false, true); return; }
+    } else {
+      await modal({ titulo: '¡Listo por hoy! 🎉', mensaje: 'Cerraste todos los repasos que tocaban hoy.', botones: [{ texto: 'Ver «Toca hoy»', valor: true, clase: 'primary' }] });
+    }
+    await volverMenu();
+    abrirHoy();
+    return;
+  }
   if (S2.ronda.azar) {
     // Terminó la ronda al azar: otra mezcla nueva o volver al inicio
     const ruta = S2.ruta;
@@ -1659,6 +1682,8 @@ async function calificar(act, valor) {
   S2.calificada = true;
   S2.ronda.hechas.add(id);
   if (valor === 'apr') {
+    const t = marcarCorrecta(id);
+    if (t) aviso(t);
     // Solo se quita de «Para repasar» si se respondió desde el repaso; fuera de él, Continuar no la toca
     if (enRepaso(S2)) quitarRepaso(id);
     S2.ronda.dudosas.delete(id);
@@ -1684,6 +1709,55 @@ function actualizarDud(act) {
   b.textContent = on ? '★ En repaso' : '☆ Para repasar';
   b.classList.toggle('on', on);
   b.disabled = act === 'tipeo' && !!S2.pistas;
+}
+
+
+/* =====================================================================
+   REPETICIÓN ESPACIADA (pantalla «Toca hoy»)
+   Cada pregunta tiene un calendario fijo desde su día 0 (la primera vez que se marca «Correcta»).
+   E.espaciado[id] = { d0, paso, prox, extra, mod }  (fechas 'YYYY-MM-DD')
+   ===================================================================== */
+const INTERVALOS = [1, 3, 6, 12, 24, 48, 96, 192, 384, 768];   // días desde el día 0
+const hoyStr = () => ahora().slice(0, 10);
+function sumarDias(f, n) {
+  const [a, m, d] = f.split('-').map(Number);
+  const x = new Date(a, m - 1, d + n, 12);
+  return `${x.getFullYear()}-${pad(x.getMonth() + 1)}-${pad(x.getDate())}`;
+}
+const DIAS = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
+function fechaDia(f) {
+  const [a, m, d] = f.split('-').map(Number);
+  return `${DIAS[new Date(a, m - 1, d, 12).getDay()]} ${pad(d)}/${pad(m)}`;
+}
+/** Se llama al marcar «Correcta» (o «Aprendida»). Devuelve un texto para el aviso. */
+function marcarCorrecta(qid) {
+  E.espaciado = E.espaciado || {};
+  const hoy = hoyStr();
+  const e = E.espaciado[qid];
+  if (!e) {
+    E.espaciado[qid] = { d0: hoy, paso: 0, prox: sumarDias(hoy, INTERVALOS[0]), extra: '', mod: Date.now() };
+    return 'Día 0 ✓ · primer repaso mañana';
+  }
+  let txt = '';
+  if (e.prox && e.prox <= hoy) {
+    // Cierra el repaso. Si venía atrasada cuenta como uno solo y sigue con la próxima fecha del calendario original.
+    const k = e.paso + 1;
+    const j = INTERVALOS.findIndex(n => sumarDias(e.d0, n) > hoy);
+    e.paso = j < 0 ? INTERVALOS.length : j;
+    e.prox = j < 0 ? '' : sumarDias(e.d0, INTERVALOS[j]);
+    e.mod = Date.now();
+    txt = `Repaso ${k} ✓` + (e.prox ? ` · próximo: ${fechaDia(e.prox)}` : ' · calendario completo 🎉');
+  }
+  if (e.extra && e.extra <= hoy) { e.extra = ''; e.mod = Date.now(); txt = txt || 'Repaso extra ✓'; }
+  return txt;
+}
+/** Preguntas que tocan hoy: con repaso vencido (o atrasado) o con un repaso extra pedido para hoy. */
+function itemsHoy() {
+  const hoy = hoyStr();
+  return Object.entries(E.espaciado || {})
+    .map(([id, e]) => ({ q: E.preguntas.find(x => x.id === id), e }))
+    .filter(x => x.q && ((x.e.prox && x.e.prox <= hoy) || (x.e.extra && x.e.extra <= hoy)))
+    .sort((a, b) => (a.e.prox || a.e.extra).localeCompare(b.e.prox || b.e.extra) || a.q.num - b.q.num);
 }
 
 /* ----- Pantalla "Para repasar" ----- */
@@ -1813,6 +1887,53 @@ function renderProgreso() {
     cont.append(card);
   });
 }
+
+function abrirHoy() { entrar('hoy'); renderHoy(); }
+function renderHoy() {
+  const items = itemsHoy();
+  const hoy = hoyStr(), manana = sumarDias(hoy, 1);
+  const todas = Object.entries(E.espaciado || {}).filter(([id]) => E.preguntas.some(q => q.id === id));
+  const nManana = todas.filter(([, e]) => e.prox === manana || e.extra === manana).length;
+  const res = $('#h-resumen');
+  res.textContent = !todas.length
+    ? 'Todavía no hay preguntas en el calendario. Cuando marques una como «Correcta», empieza su día 0.'
+    : `Hoy tocan ${items.length} · Mañana ${nManana} · En el calendario: ${todas.length}`;
+  $('#h-botones').hidden = !items.length;
+  const cont = $('#h-lista');
+  cont.innerHTML = '';
+  if (todas.length && !items.length) cont.append(el('p', 'muted centro', 'No te toca nada hoy 🎉'));
+  items.forEach(({ q, e }) => {
+    const b = el('button', 'item');
+    b.type = 'button';
+    const atraso = e.prox && e.prox < hoy ? Math.round((new Date(hoy) - new Date(e.prox)) / 86400000) : 0;
+    const cuando = e.prox && e.prox <= hoy ? `Repaso ${e.paso + 1}` + (atraso ? ` · atrasada ${atraso} d` : ' · hoy') : 'Repaso extra';
+    b.append(
+      el('span', 'tag', cuando),
+      el('span', 'num', pad(q.num, 3)), document.createTextNode(resumen(q)),
+      el('span', 'sub', q.ruta.slice(2).join(' › '))
+    );
+    b.onclick = async () => {
+      const v = await modal({
+        titulo: `Pregunta ${pad(q.num, 3)}`, mensaje: resumen(q), apilados: true,
+        botones: [
+          { texto: '⏱️ Practicar revelando', valor: 'palabras', clase: 'primary' },
+          { texto: '⌨️ Practicar escribiendo', valor: 'tipeo', clase: 'primary' },
+          { texto: 'Cancelar', valor: null, cancel: true }
+        ]
+      });
+      if (v) empezarHoy(v, q.id);
+    };
+    cont.append(b);
+  });
+}
+/** Ronda de «Toca hoy»: botones normales (Correcta / Reintentar / ☆ Para repasar); solo «Correcta» cierra el repaso. */
+function empezarHoy(act, primero) {
+  let alc = itemsHoy().map(x => x.q.id);
+  const i = primero ? alc.indexOf(primero) : -1;
+  if (i > 0) alc = alc.slice(i).concat(alc.slice(0, i));
+  if (!alc.length) return;
+  (act === 'tipeo' ? iniciarTipeo : iniciarEval)(null, alc, false, false, true);
+}
 function abrirRepaso() { entrar('repaso'); renderRepaso(); }
 function renderRepaso() {
   enlazarFiltro('#r-filtro', 'rep', renderRepaso);
@@ -1867,6 +1988,10 @@ function enlazar() {
   $('#m-evaluar').onclick = abrirActividades;
   $('#m-datos').onclick = abrirDatos;
   $('#m-repaso').onclick = abrirRepaso;
+  $('#m-hoy').onclick = abrirHoy;
+  $('#h-volver').onclick = volverMenu;
+  $('#h-pal').onclick = () => empezarHoy('palabras');
+  $('#h-tip').onclick = () => empezarHoy('tipeo');
   $('#m-progreso').onclick = abrirProgreso;
   $('#p-volver').onclick = volverMenu;
   $('#r-volver').onclick = volverMenu;
@@ -2015,6 +2140,8 @@ async function sincronizar() {
 
     const subirR = Object.entries(E.repaso || {}).map(([id, x]) => ({ id, tipo: x.tipo, motivo: x.motivo, f: x.f, mod: x.mod || 0, q: !!x.q }));
 
+    const subirE = Object.entries(E.espaciado || {}).map(([id, x]) => ({ id, d0: x.d0, paso: x.paso, prox: x.prox || '', extra: x.extra || '', mod: x.mod || 0 }));
+
     // 2) Un solo viaje: sube lo nuevo y baja el estado completo de la hoja
     const ctl = new AbortController();
     const corte = setTimeout(() => ctl.abort(), 60000);
@@ -2023,7 +2150,7 @@ async function sincronizar() {
       const resp = await fetch(N.url, {
         method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-        body: JSON.stringify({ clave: N.clave, disp: N.disp || 'sin nombre', preguntas: subirP, tiempos: subirT, borrar: N.borrados, repaso: subirR }),
+        body: JSON.stringify({ clave: N.clave, disp: N.disp || 'sin nombre', preguntas: subirP, tiempos: subirT, borrar: N.borrados, repaso: subirR, espaciado: subirE }),
         signal: ctl.signal
       });
       r = await resp.json();
@@ -2109,6 +2236,20 @@ async function sincronizar() {
       });
     }
 
+    // 6) Espaciado: por pregunta gana el cambio más reciente
+    let espBajados = 0;
+    if (Array.isArray(r.espaciado)) {
+      E.espaciado = E.espaciado || {};
+      r.espaciado.forEach(x => {
+        if (!x || !x.id || !x.d0 || !hay.has(x.id)) return;
+        const l = E.espaciado[x.id];
+        if (!l || (x.mod || 0) > (l.mod || 0)) {
+          E.espaciado[x.id] = { d0: x.d0, paso: Number(x.paso) || 0, prox: x.prox || '', extra: x.extra || '', mod: x.mod || 0 };
+          espBajados++;
+        }
+      });
+    }
+
     N.vistos = [...enHoja].filter(id => E.preguntas.some(q => q.id === id));
     N.borrados = [];
     N.ultimaSync = t0;
@@ -2120,6 +2261,7 @@ async function sincronizar() {
     const partes = [`Preguntas: ${nuevas} nuevas, ${actualizadas} actualizadas${quitadas ? ', ' + quitadas + ' quitadas' : ''}, ${subirP.length} subidas`,
       `Tiempos: ${bajados} bajados, ${subirT.length} subidos`];
     if (Array.isArray(r.repaso)) partes.push(`Repaso: ${repBajados} cambio${repBajados === 1 ? '' : 's'} bajado${repBajados === 1 ? '' : 's'}`);
+    if (Array.isArray(r.espaciado)) partes.push(`Calendario: ${espBajados} cambio${espBajados === 1 ? '' : 's'} bajado${espBajados === 1 ? '' : 's'}`);
     if (r.omitidas) partes.push(`${r.omitidas} fila${r.omitidas === 1 ? '' : 's'} de la hoja incompleta${r.omitidas === 1 ? '' : 's'} (revisá Área, Año, Materia, Actividad, Pregunta y Respuesta)`);
     est.textContent = partes.join(' · ');
     aviso('Sincronizado');
@@ -2164,6 +2306,7 @@ if (mqPC && mqPC.addEventListener) mqPC.addEventListener('change', aplicarModo);
     if (guardado) E = Object.assign(E, guardado);
     E.tiemposTipeo = E.tiemposTipeo || {};
     E.repaso = E.repaso || {};
+    E.espaciado = E.espaciado || {};
   } catch (err) {
     almacenamientoOk = false;
     aviso('No se pudo abrir el almacenamiento del navegador.');
